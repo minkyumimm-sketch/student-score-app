@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>点数入力</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<h1>点数入力</h1>
+
+<div id="step-search" class="step active">
+  <div class="hint">名前を入力してください。</div>
+  <input type="text" id="studentSearch" placeholder="氏名" oninput="ScoreAppUi.onStudentSearchInput()" />
+  <div id="studentList" class="tap-list"></div>
+</div>
+
+<div id="step-tests" class="step">
+  <div class="selected-label" id="testsStudentLabel"></div>
+  <div class="hint">受けたテストを選んでください。</div>
+  <div id="testsMessage" class="message"></div>
+  <div id="testList" class="tap-list"></div>
+  <button class="big-button secondary" onclick="ScoreAppUi.backToSearch()">生徒選択に戻る</button>
+</div>
+
+<div id="step-score" class="step">
+  <div class="selected-label" id="scoreLabel"></div>
+  <div class="hint">受けた教科だけ点数を入力してください（受けていない教科は空欄でOKです）。</div>
+  <div class="subject-row"><label>英語</label><input type="number" inputmode="decimal" id="s_english" /></div>
+  <div class="subject-row"><label>数学</label><input type="number" inputmode="decimal" id="s_math" /></div>
+  <div class="subject-row"><label>理科</label><input type="number" inputmode="decimal" id="s_science" /></div>
+  <div class="subject-row"><label>社会</label><input type="number" inputmode="decimal" id="s_social" /></div>
+  <div class="subject-row"><label>国語</label><input type="number" inputmode="decimal" id="s_japanese" /></div>
+  <div id="scoreMessage" class="message"></div>
+  <button class="big-button" onclick="ScoreAppUi.goToConfirm()">確認する</button>
+  <button class="big-button secondary" onclick="ScoreAppUi.backToTests()">戻る</button>
+</div>
+
+<div id="step-confirm" class="step">
+  <div class="hint">この内容で送信します。よろしいですか？</div>
+  <div class="confirm-student-name" id="c_student"></div>
+  <div class="summary-row"><span>テスト</span><span id="c_test"></span></div>
+  <div class="summary-row"><span>英語</span><span id="c_english"></span></div>
+  <div class="summary-row"><span>数学</span><span id="c_math"></span></div>
+  <div class="summary-row"><span>理科</span><span id="c_science"></span></div>
+  <div class="summary-row"><span>社会</span><span id="c_social"></span></div>
+  <div class="summary-row"><span>国語</span><span id="c_japanese"></span></div>
+  <div class="summary-row"><span><strong>合計</strong></span><span id="c_total"></span></div>
+  <div id="confirmMessage" class="message"></div>
+  <button class="big-button" id="submitScoreBtn" onclick="ScoreAppUi.submitScore()">登録する</button>
+  <button class="big-button secondary" onclick="ScoreAppUi.backToScore()">修正する</button>
+</div>
+
+<div id="step-done" class="step">
+  <div class="message success">点数を登録しました。ありがとうございました！</div>
+  <div class="summary-row"><span>生徒</span><span id="doneStudent"></span></div>
+  <div class="summary-row"><span>テスト</span><span id="doneTest"></span></div>
+  <button class="big-button" onclick="ScoreAppUi.resetAll()">戻る</button>
+</div>
+
+<script src="config.js"></script>
+<script src="api.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
