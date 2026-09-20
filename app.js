@@ -215,11 +215,26 @@
       var doneTestName = state.selectedTest.testName;
       document.getElementById('doneStudent').textContent = doneStudentName;
       document.getElementById('doneTest').textContent = doneTestName;
+      renderDoneFeedback_(result.feedback);
 
       // 共用タブレットのため、保存成功後は生徒に関する状態を完全にクリアする。
       resetStudentDependentState_();
       state.selectedStudent = null;
       goToStep('done');
+    });
+  }
+
+  // Phase 2A: 事実として確認できるプラスの成長だけを表示する（サーバー側で positive only
+  // に絞り込み済みのfeedback配列をそのまま描画するだけ。0件なら何も追加表示しない＝
+  // 完了メッセージのみになる。DOWN・平均比較・順位等は元々配列に含まれない）。
+  function renderDoneFeedback_(feedback) {
+    var container = document.getElementById('doneFeedback');
+    container.innerHTML = '';
+    (feedback || []).forEach(function (item) {
+      var el = document.createElement('div');
+      el.className = 'feedback-item';
+      el.textContent = item.text;
+      container.appendChild(el);
     });
   }
 

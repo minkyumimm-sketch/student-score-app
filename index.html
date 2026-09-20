@@ -53,6 +53,8 @@
 
 <div id="step-done" class="step">
   <div class="message success">点数を登録しました。ありがとうございました！</div>
+  <!-- Phase 2A: 自己成長フィードバック。feedbackが0件のときは何も追加表示しない。 -->
+  <div id="doneFeedback" class="feedback-list"></div>
   <div class="summary-row"><span>生徒</span><span id="doneStudent"></span></div>
   <div class="summary-row"><span>テスト</span><span id="doneTest"></span></div>
   <button class="big-button" onclick="ScoreAppUi.resetAll()">戻る</button>
