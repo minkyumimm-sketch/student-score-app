@@ -9,9 +9,9 @@ window.SCORE_APP_CONFIG = {
   // 正式API: score-api-production deployment（version23、固定旧本番@19ではない）
   API_BASE_URL: 'https://script.google.com/macros/s/AKfycbwkhC42EmkWWAfLJV9DVL59yaeVE8oYSMP5VfYTxuHTnDL0a1hcOZQE7wDa999Oef3apA/exec',
   // Phase 2B STEP 5（学年平均入力UI）専用の追加設定。学年平均入力API
-  // （isAverageInputMember/listAverageInputTests/getSchoolGradeAverage/saveSchoolGradeAverage）は
-  // まだscore-api-productionへ反映していないため、検証用のscore-api-poc deploymentを別途指す。
-  // API_BASE_URL（通常点数入力、production）には一切触れない、完全に独立した追加キー。
-  // Phase 2B が正式反映される際は、この値をproduction URLへ差し替えるだけでよい（コード変更不要）。
-  AVERAGE_API_BASE_URL: 'https://script.google.com/macros/s/AKfycbyve0Avsm3Il3gKysHZYYiTy6tXaN3zgHefxjjdTCERjtLMfrfshQxNmf9lM0nEB0lq1w/exec'
+  // （isAverageInputMember/listAverageInputTests/getSchoolGradeAverage/saveSchoolGradeAverage）。
+  // Phase 2B STEP 8でscore-api-productionへ反映済み（production @28）のため、
+  // STEP 9でscore-api-pocから正式にproduction deploymentへ切り替えた
+  // （API_BASE_URLと同じdeploymentを指すが、キー自体は将来また分離できるよう残している）。
+  AVERAGE_API_BASE_URL: 'https://script.google.com/macros/s/AKfycbwkhC42EmkWWAfLJV9DVL59yaeVE8oYSMP5VfYTxuHTnDL0a1hcOZQE7wDa999Oef3apA/exec'
 };
