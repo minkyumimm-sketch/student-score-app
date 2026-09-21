@@ -20,7 +20,50 @@
   <div class="hint">受けたテストを選んでください。</div>
   <div id="testsMessage" class="message"></div>
   <div id="testList" class="tap-list"></div>
+  <!-- Phase 2B STEP 5: 学年平均入力担当者のみ表示（isAverageInputMemberの結果でapp.jsがhiddenを切り替える）。 -->
+  <button id="showAverageInputBtn" class="big-button secondary" hidden onclick="ScoreAppUi.showAverageInputTests()">学年平均を登録する</button>
   <button class="big-button secondary" onclick="ScoreAppUi.backToSearch()">生徒選択に戻る</button>
+</div>
+
+<!-- Phase 2B STEP 5: 学年平均入力（担当者のみ）。通常点数入力(step-tests〜step-done)とは別画面・別state。 -->
+<div id="step-avg-tests" class="step">
+  <div class="selected-label" id="avgTestsStudentLabel"></div>
+  <div class="hint">学年平均を登録するテストを選んでください。</div>
+  <div id="avgTestsMessage" class="message"></div>
+  <div id="avgTestList" class="tap-list"></div>
+  <button class="big-button secondary" onclick="ScoreAppUi.backToTestsFromAverage()">戻る</button>
+</div>
+
+<div id="step-avg-form" class="step">
+  <div class="selected-label" id="avgFormLabel"></div>
+  <div class="hint">学年平均が分かる教科だけ入力してください（不明な教科は空欄でOKです）。</div>
+  <div class="subject-row"><label>英語</label><input type="number" inputmode="decimal" id="avg_english" /></div>
+  <div class="subject-row"><label>数学</label><input type="number" inputmode="decimal" id="avg_math" /></div>
+  <div class="subject-row"><label>理科</label><input type="number" inputmode="decimal" id="avg_science" /></div>
+  <div class="subject-row"><label>社会</label><input type="number" inputmode="decimal" id="avg_social" /></div>
+  <div class="subject-row"><label>国語</label><input type="number" inputmode="decimal" id="avg_japanese" /></div>
+  <div id="avgFormMessage" class="message"></div>
+  <button class="big-button" onclick="ScoreAppUi.goToAverageConfirm()">確認する</button>
+  <button class="big-button secondary" onclick="ScoreAppUi.backToAverageTests()">戻る</button>
+</div>
+
+<div id="step-avg-confirm" class="step">
+  <div class="hint">学年平均をこの内容で登録します。よろしいですか？</div>
+  <div class="summary-row"><span>テスト</span><span id="avgc_test"></span></div>
+  <div class="summary-row"><span>英語</span><span id="avgc_english"></span></div>
+  <div class="summary-row"><span>数学</span><span id="avgc_math"></span></div>
+  <div class="summary-row"><span>理科</span><span id="avgc_science"></span></div>
+  <div class="summary-row"><span>社会</span><span id="avgc_social"></span></div>
+  <div class="summary-row"><span>国語</span><span id="avgc_japanese"></span></div>
+  <div id="avgConfirmMessage" class="message"></div>
+  <button class="big-button" id="submitAverageBtn" onclick="ScoreAppUi.saveAverageScore()">登録する</button>
+  <button class="big-button secondary" onclick="ScoreAppUi.backToAverageForm()">修正する</button>
+</div>
+
+<div id="step-avg-done" class="step">
+  <div class="message success">学年平均を登録しました。</div>
+  <div class="summary-row"><span>テスト</span><span id="avgDoneTest"></span></div>
+  <button class="big-button" onclick="ScoreAppUi.resetAll()">戻る</button>
 </div>
 
 <div id="step-score" class="step">

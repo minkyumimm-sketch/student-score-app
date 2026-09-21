@@ -1,5 +1,16 @@
 /* 既存GAS版（StudentAppStyles.html）のタブレット向けスタイルを踏襲する。
    文字を小さくしすぎない・ボタンを大きくする・タップ領域を広く取る方針を維持。 */
+/* Phase 2B STEP 6実機QAで発見: hidden属性はブラウザのUAスタイルシートが持つ
+   [hidden]{display:none}という既定ルールで隠れるが、authorスタイル（このファイル）の
+   .big-button{display:block}のようなdisplay指定は、詳細度が同じでもorigin（UA<author）の
+   優先順位でUA既定ルールに必ず勝つ。そのためhidden属性とdisplay指定classを同時に持つ要素
+   （showAverageInputBtn）はJS側でhidden=true/falseを正しく切り替えても実際には常に表示され
+   続けてしまう（isAverageInputMemberの判定結果に関わらずボタンが出る、という実機QAでの
+   不具合の直接の原因）。hidden属性を使うあらゆる要素で今後も同じ事故が起きないよう、
+   ここで明示的にUA既定ルールと同じ効果をauthor側で宣言し直す。 */
+[hidden] {
+  display: none !important;
+}
 * {
   box-sizing: border-box;
 }

@@ -8,8 +8,11 @@ window.ScoreApi = (function () {
     return window.SCORE_APP_CONFIG.API_BASE_URL;
   }
 
-  function buildGetUrl(action, params) {
-    var url = baseUrl() + '?action=' + encodeURIComponent(action);
+  // Phase 2B STEP 5: 学年平均入力APIだけscore-api-poc（別deployment）を使うための
+  // 追加base URL。既存の呼び出し（baseOverride省略）は引き続きAPI_BASE_URL（production）を使い、
+  // 挙動は一切変えない。
+  function buildGetUrl(action, params, baseOverride) {
+    var url = (baseOverride || baseUrl()) + '?action=' + encodeURIComponent(action);
     Object.keys(params || {}).forEach(function (key) {
       url += '&' + encodeURIComponent(key) + '=' + encodeURIComponent(params[key]);
     });
@@ -38,13 +41,14 @@ window.ScoreApi = (function () {
 
   // 匿名fetch。credentialsは明示的に送らない（Googleログイン状態に依存しないことを
   // 通信PoCで確認済みの構成を維持するため）。redirectもbrowser標準挙動のまま。
-  function get(action, params) {
-    return normalizeResult_(fetch(buildGetUrl(action, params)));
+  // baseOverrideは省略可（省略時は既存どおりAPI_BASE_URL/productionを使う）。
+  function get(action, params, baseOverride) {
+    return normalizeResult_(fetch(buildGetUrl(action, params, baseOverride)));
   }
 
-  function post(action, payload) {
+  function post(action, payload, baseOverride) {
     var body = JSON.stringify(Object.assign({ action: action }, payload || {}));
-    return normalizeResult_(fetch(baseUrl(), {
+    return normalizeResult_(fetch(baseOverride || baseUrl(), {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: body
