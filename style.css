@@ -151,3 +151,25 @@ input[type="number"] {
   color: #0a6b2a;
   padding: 10px 0;
 }
+/* Phase 2C: 学年平均との相対成長（参考情報）。Phase 2Aの自己成長フィードバック（緑・太字・
+   中央寄せ）とは意図的に別トーンにする。ランキング・偏差値ではなく「参考情報」であることを
+   視覚的にも伝えるため、控えめな配色の枠付きボックス・左寄せ・小さめの文字にする。 */
+.relative-growth-list {
+  margin: 18px 0;
+  padding: 12px 14px;
+  border: 1px solid #cfe0f7;
+  border-radius: 6px;
+  background: #f3f8ff;
+  text-align: left;
+}
+.relative-growth-heading {
+  font-size: 14px;
+  font-weight: bold;
+  color: #345d8a;
+  margin-bottom: 8px;
+}
+.relative-growth-item {
+  font-size: 16px;
+  color: #345d8a;
+  padding: 4px 0;
+}

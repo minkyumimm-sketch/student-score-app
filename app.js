@@ -7,6 +7,8 @@
 (function () {
   var SEARCH_DEBOUNCE_MS = 250; // 既存GAS版と同じdebounce値
   var SUBJECT_KEYS = ['english', 'math', 'science', 'social', 'japanese']; // 既存GAS版と同じ順序
+  // Phase 2C: 学年平均との相対成長の表示用ラベル。SUBJECT_KEYSと同じ並び順で使う。
+  var SUBJECT_LABELS_ = { english: '英語', math: '数学', science: '理科', social: '社会', japanese: '国語' };
   // クライアント側入力補助のみの上限値。サーバー側（validateScoreInput_）には意図的に
   // 上限チェックがない（配点が異なるテストに対応するため、既存の意図的仕様）ため、
   // ここでの100という値も入力のしやすさのためだけで、100点超の送信自体は拒否しない。
@@ -245,6 +247,7 @@
       document.getElementById('doneStudent').textContent = doneStudentName;
       document.getElementById('doneTest').textContent = doneTestName;
       renderDoneFeedback_(result.feedback);
+      renderDoneRelativeGrowth_(result.relativeGrowth);
 
       // 共用タブレットのため、保存成功後は生徒に関する状態を完全にクリアする。
       resetStudentDependentState_();
@@ -265,6 +268,66 @@
       el.textContent = item.text;
       container.appendChild(el);
     });
+  }
+
+  // Phase 2C: 学年平均との相対成長（参考情報）。Phase 2Aのfeedbackとは完全に独立した
+  // ブロックとして扱い、片方が0件・欠損でももう片方の表示には一切影響させない。
+  // relativeGrowthはundefined/null（旧production@28・内部エラー時のfallback）の場合が
+  // あり得るため、その場合と「比較可能な項目が1つもない場合」の両方でブロックごと非表示にする
+  // （Phase 2Aの「0件なら何も追加表示しない」という既存方針をそのまま踏襲する。
+  // 比較不能はネガティブな情報ではなく単に「まだ判断材料がない」だけなので、
+  // その旨を説明するメッセージも出さない）。
+  function renderDoneRelativeGrowth_(relativeGrowth) {
+    var container = document.getElementById('doneRelativeGrowth');
+    var itemsContainer = document.getElementById('doneRelativeGrowthItems');
+    itemsContainer.innerHTML = '';
+
+    var lines = collectRelativeGrowthLines_(relativeGrowth);
+    if (!lines.length) {
+      container.hidden = true;
+      return;
+    }
+    lines.forEach(function (text) {
+      var el = document.createElement('div');
+      el.className = 'relative-growth-item';
+      el.textContent = text; // XSS対策: 必ずtextContentを使う（innerHTML化しない）
+      itemsContainer.appendChild(el);
+    });
+    container.hidden = false;
+  }
+
+  // comparable:trueの項目（5教科合計・各科目）だけを表示対象として文字列化する。
+  // ランキング・偏差値・順位には一切触れず、「学年平均との差が前回からどれだけ変化したか」
+  // という数値（difference_change）のみを、悪化/下がった等の断定的な言葉を使わずに示す。
+  function collectRelativeGrowthLines_(relativeGrowth) {
+    if (!relativeGrowth || typeof relativeGrowth !== 'object') return [];
+    var lines = [];
+    if (relativeGrowth.five_subject && relativeGrowth.five_subject.comparable === true) {
+      lines.push('5教科合計：学年平均との差の変化 ' + formatRelativeGrowthDiff_(relativeGrowth.five_subject.difference_change) + '点');
+    }
+    var subjects = relativeGrowth.subjects;
+    if (subjects) {
+      SUBJECT_KEYS.forEach(function (key) {
+        var subject = subjects[key];
+        if (subject && subject.comparable === true) {
+          lines.push(SUBJECT_LABELS_[key] + '：学年平均との差の変化 ' + formatRelativeGrowthDiff_(subject.difference_change) + '点');
+        }
+      });
+    }
+    return lines;
+  }
+
+  // 符号付き・小数第1位までに丸め、末尾の".0"は取り除く（例: 2.0→"+2", 2.5→"+2.5", -1→"-1"）。
+  // difference_changeはサーバー側の設計上NaN/Infinityにならないが、万一の異常値でも
+  // 画面を壊さないよう防御的に0扱いする。
+  function formatRelativeGrowthDiff_(value) {
+    if (typeof value !== 'number' || !isFinite(value)) return '0';
+    var rounded = Math.round(value * 10) / 10;
+    if (Math.abs(rounded) < 0.05) rounded = 0; // -0表示・誤差吸収
+    var text = Math.abs(rounded).toFixed(1).replace(/\.0$/, '');
+    if (rounded > 0) return '+' + text;
+    if (rounded < 0) return '-' + text;
+    return text;
   }
 
   // ===== Phase 2B STEP 5: 学年平均入力 =====
@@ -450,6 +513,11 @@
     document.getElementById('studentSearch').value = '';
     document.getElementById('studentList').innerHTML = '';
     SUBJECT_KEYS.forEach(function (key) { document.getElementById('s_' + key).value = ''; });
+    // Phase 2C: 次の生徒の完了画面に前の生徒の相対成長表示が一瞬でも残らないよう、
+    // 明示的にクリアする（次回submitScore成功時にrenderDoneRelativeGrowth_で必ず
+    // 上書きされるため必須ではないが、Phase 2Aのdoneフィードバックと同様に防御的に行う）。
+    document.getElementById('doneRelativeGrowthItems').innerHTML = '';
+    document.getElementById('doneRelativeGrowth').hidden = true;
     goToStep('search');
   }
 

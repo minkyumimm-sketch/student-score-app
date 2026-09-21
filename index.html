@@ -98,6 +98,13 @@
   <div class="message success">点数を登録しました。ありがとうございました！</div>
   <!-- Phase 2A: 自己成長フィードバック。feedbackが0件のときは何も追加表示しない。 -->
   <div id="doneFeedback" class="feedback-list"></div>
+  <!-- Phase 2C: 学年平均との相対成長（参考情報）。Phase 2Aとは独立した別ブロックで、
+       比較可能な項目が1つもない場合・relativeGrowth自体が無い場合（旧production等）は
+       hidden属性でブロックごと非表示にする（app.jsのrenderDoneRelativeGrowth_参照）。 -->
+  <div id="doneRelativeGrowth" class="relative-growth-list" hidden>
+    <div class="relative-growth-heading">参考：学年平均との比較</div>
+    <div id="doneRelativeGrowthItems"></div>
+  </div>
   <div class="summary-row"><span>生徒</span><span id="doneStudent"></span></div>
   <div class="summary-row"><span>テスト</span><span id="doneTest"></span></div>
   <button class="big-button" onclick="ScoreAppUi.resetAll()">戻る</button>
