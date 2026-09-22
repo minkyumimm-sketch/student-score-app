@@ -28,7 +28,11 @@
     isAverageMember: false,
     averageAvailableTests: [],
     averageSelectedTest: null, // {testId, testName}
-    averagePendingSubjects: null
+    averagePendingSubjects: null,
+    // Phase 2D STEP 3: 後日フィードバック（これまでの結果を見る）用のstate。
+    // 通常点数入力state・学年平均入力stateとは完全に分離し、混線させない。
+    scoreHistory: [],
+    selectedHistoryEntry: null // getScoreHistoryの1件（{test_id, test_name, japanese, math, english, science, social, five_subject_total}）
   };
 
   var searchTimer = null;
@@ -46,6 +50,26 @@
     state.averagePendingSubjects = null;
     var averageButton = document.getElementById('showAverageInputBtn');
     if (averageButton) averageButton.hidden = true;
+    // Phase 2D STEP 3: 生徒を選び直したときに、前の生徒の結果履歴・選択中の詳細を必ずクリアする
+    // （共用タブレットのため、次の生徒へ前の生徒の結果を一瞬たりとも引き継がない）。
+    state.scoreHistory = [];
+    state.selectedHistoryEntry = null;
+    var historyListEl = document.getElementById('historyList');
+    if (historyListEl) historyListEl.innerHTML = '';
+    var historyMessageEl = document.getElementById('historyMessage');
+    if (historyMessageEl) showMessage('historyMessage', '', '');
+    clearHistoryDetailDisplay_();
+  }
+
+  // Phase 2D STEP 3: 結果詳細画面の表示をクリアする（前の生徒・前のテストの表示が
+  // 一瞬でも残らないようにする、doneRelativeGrowthのresetAllクリアと同じ考え方）。
+  function clearHistoryDetailDisplay_() {
+    var feedbackEl = document.getElementById('historyFeedback');
+    if (feedbackEl) feedbackEl.innerHTML = '';
+    var growthItemsEl = document.getElementById('historyRelativeGrowthItems');
+    if (growthItemsEl) growthItemsEl.innerHTML = '';
+    var growthEl = document.getElementById('historyRelativeGrowth');
+    if (growthEl) growthEl.hidden = true;
   }
 
   function applyScoreInputRange_() {
@@ -259,8 +283,11 @@
   // Phase 2A: 事実として確認できるプラスの成長だけを表示する（サーバー側で positive only
   // に絞り込み済みのfeedback配列をそのまま描画するだけ。0件なら何も追加表示しない＝
   // 完了メッセージのみになる。DOWN・平均比較・順位等は元々配列に含まれない）。
-  function renderDoneFeedback_(feedback) {
-    var container = document.getElementById('doneFeedback');
+  // Phase 2D STEP 3: 完了画面(doneFeedback)と結果詳細画面(historyFeedback)の両方から
+  // 同じ表示ロジックを使うため、描画先のcontainerIdだけを引数化した共通helperへ抽出した
+  // （feedback selectionロジック自体はサーバー側のまま、ここではコピーしていない）。
+  function renderFeedbackList_(containerId, feedback) {
+    var container = document.getElementById(containerId);
     container.innerHTML = '';
     (feedback || []).forEach(function (item) {
       var el = document.createElement('div');
@@ -270,6 +297,10 @@
     });
   }
 
+  function renderDoneFeedback_(feedback) {
+    renderFeedbackList_('doneFeedback', feedback);
+  }
+
   // Phase 2C: 学年平均との相対成長（参考情報）。Phase 2Aのfeedbackとは完全に独立した
   // ブロックとして扱い、片方が0件・欠損でももう片方の表示には一切影響させない。
   // relativeGrowthはundefined/null（旧production@28・内部エラー時のfallback）の場合が
@@ -277,9 +308,13 @@
   // （Phase 2Aの「0件なら何も追加表示しない」という既存方針をそのまま踏襲する。
   // 比較不能はネガティブな情報ではなく単に「まだ判断材料がない」だけなので、
   // その旨を説明するメッセージも出さない）。
-  function renderDoneRelativeGrowth_(relativeGrowth) {
-    var container = document.getElementById('doneRelativeGrowth');
-    var itemsContainer = document.getElementById('doneRelativeGrowthItems');
+  // Phase 2D STEP 3: 完了画面(doneRelativeGrowth)と結果詳細画面(historyRelativeGrowth)の
+  // 両方から同じ表示ロジックを使うため、描画先のcontainerId/itemsContainerIdだけを引数化した
+  // 共通helperへ抽出した（collectRelativeGrowthLines_・formatRelativeGrowthDiff_という
+  // Phase 2Cの解釈ロジック自体は一切変更・複製せず、そのまま呼ぶだけ）。
+  function renderRelativeGrowthList_(containerId, itemsContainerId, relativeGrowth) {
+    var container = document.getElementById(containerId);
+    var itemsContainer = document.getElementById(itemsContainerId);
     itemsContainer.innerHTML = '';
 
     var lines = collectRelativeGrowthLines_(relativeGrowth);
@@ -294,6 +329,10 @@
       itemsContainer.appendChild(el);
     });
     container.hidden = false;
+  }
+
+  function renderDoneRelativeGrowth_(relativeGrowth) {
+    renderRelativeGrowthList_('doneRelativeGrowth', 'doneRelativeGrowthItems', relativeGrowth);
   }
 
   // comparable:trueの項目（5教科合計・各科目）だけを表示対象として文字列化する。
@@ -328,6 +367,113 @@
     if (rounded > 0) return '+' + text;
     if (rounded < 0) return '-' + text;
     return text;
+  }
+
+  // ===== Phase 2D STEP 3: これまでの結果を見る（後日フィードバック） =====
+  // 通常点数入力（生徒検索→テスト選択→点数入力→確認→保存）とは別画面・別stateとして扱う。
+  // 本人確認画面は挟まない（Phase 2D STEP 1/2確定仕様どおり、氏名検索→生徒選択という
+  // 既存Publicアプリのセキュリティ境界のまま）。Phase 2A/2Cの計算ロジックは一切複製せず、
+  // 既存GET API（getScoreHistory/getScoreFeedback/getRelativeGrowth）が返した結果を
+  // そのまま表示するだけに徹する。
+
+  function showScoreHistory() {
+    document.getElementById('historyStudentLabel').textContent = state.selectedStudent.displayName + ' さん';
+    showMessage('historyMessage', 'info', '読み込み中…');
+    document.getElementById('historyList').innerHTML = '';
+    var studentId = state.selectedStudent.studentId;
+    ScoreApi.get('getScoreHistory', { studentId: studentId }).then(function (result) {
+      // 取得結果が返ってくる前に生徒が切り替わっていたら、古い結果を反映しない。
+      if (!state.selectedStudent || state.selectedStudent.studentId !== studentId) return;
+      if (!result.ok) {
+        showMessage('historyMessage', '', result.error);
+        return;
+      }
+      showMessage('historyMessage', '', '');
+      // APIが返した順序をそのまま使う（Public側で独自ソートしない、入塾前点数も
+      // 特別扱いせず通常の履歴項目としてそのまま並べる）。
+      state.scoreHistory = result.history;
+      renderScoreHistoryList_();
+      goToStep('score-history');
+    });
+  }
+
+  function renderScoreHistoryList_() {
+    var container = document.getElementById('historyList');
+    container.innerHTML = '';
+    if (!state.scoreHistory.length) {
+      container.textContent = 'まだ登録された結果はありません。';
+      return;
+    }
+    state.scoreHistory.forEach(function (entry) {
+      var item = document.createElement('div');
+      item.className = 'tap-item';
+      // five_subject_totalがnullの場合（5教科揃っていない）は合計を表示しない。
+      item.textContent = (typeof entry.five_subject_total === 'number')
+        ? entry.test_name + '（5教科合計：' + entry.five_subject_total + '点）'
+        : entry.test_name;
+      item.onclick = function () { selectHistoryEntry_(entry); };
+      container.appendChild(item);
+    });
+  }
+
+  // 0点は"0点"、null/未入力は"—"（0点扱いにしない）。科目・5教科合計の両方で使う共通format。
+  function formatHistoryPointValue_(value) {
+    return (typeof value === 'number') ? String(value) + '点' : '—';
+  }
+
+  // 基本点数は履歴一覧の取得結果からそのまま即時表示する（追加APIを呼ばない）。
+  // Phase 2A feedback / Phase 2C relative growthは、この後で独立して追加取得する
+  // （片方が失敗しても基本点数の表示は消さない。Gate H方針）。
+  function selectHistoryEntry_(entry) {
+    state.selectedHistoryEntry = entry;
+    clearHistoryDetailDisplay_();
+
+    document.getElementById('hd_test').textContent = entry.test_name;
+    SUBJECT_KEYS.forEach(function (key) {
+      document.getElementById('hd_' + key).textContent = formatHistoryPointValue_(entry[key]);
+    });
+    document.getElementById('hd_total').textContent = formatHistoryPointValue_(entry.five_subject_total);
+
+    goToStep('score-history-detail');
+    fetchHistoryFeedback_(entry.test_id);
+    fetchHistoryRelativeGrowth_(entry.test_id);
+  }
+
+  // Phase 2A feedbackの後日取得。renderDoneFeedback_と同じrenderFeedbackList_を再利用するだけで、
+  // feedback selectionロジック自体はサーバー側（buildPositiveScoreFeedback_）のまま。
+  // 失敗時はfeedbackブロックを単に空のままにする（完了画面の「0件なら何も追加表示しない」と同じ扱い）。
+  function fetchHistoryFeedback_(testId) {
+    var studentId = state.selectedStudent.studentId;
+    ScoreApi.get('getScoreFeedback', { studentId: studentId, testId: testId }).then(function (result) {
+      // 応答が返る前に別の生徒・別のテストへ切り替わっていたら反映しない（stale防止）。
+      if (!state.selectedStudent || state.selectedStudent.studentId !== studentId) return;
+      if (!state.selectedHistoryEntry || state.selectedHistoryEntry.test_id !== testId) return;
+      renderFeedbackList_('historyFeedback', result.ok ? result.feedback : []);
+    });
+  }
+
+  // Phase 2C relative growthの後日取得。renderDoneRelativeGrowth_と同じrenderRelativeGrowthList_を
+  // 再利用するだけで、比較ロジック自体はサーバー側（computeScoreRelativeGrowthFacts_）のまま。
+  // 失敗時はrelativeGrowthブロックを非表示のままにする（完了画面のundefined/null時と同じ扱い）。
+  function fetchHistoryRelativeGrowth_(testId) {
+    var studentId = state.selectedStudent.studentId;
+    ScoreApi.get('getRelativeGrowth', { studentId: studentId, testId: testId }).then(function (result) {
+      if (!state.selectedStudent || state.selectedStudent.studentId !== studentId) return;
+      if (!state.selectedHistoryEntry || state.selectedHistoryEntry.test_id !== testId) return;
+      renderRelativeGrowthList_('historyRelativeGrowth', 'historyRelativeGrowthItems', result.ok ? result.relativeGrowth : null);
+    });
+  }
+
+  function backToTestsFromHistory() {
+    // 通常テスト一覧はstateに残っているため再取得しない（backToTestsFromAverageと同じ考え方）。
+    renderTestList();
+    goToStep('tests');
+  }
+
+  function backToScoreHistory() {
+    // 取得済みの履歴一覧はstateに残っているため再取得しない（backToAverageTestsと同じ考え方）。
+    renderScoreHistoryList_();
+    goToStep('score-history');
   }
 
   // ===== Phase 2B STEP 5: 学年平均入力 =====
@@ -518,6 +664,10 @@
     // 上書きされるため必須ではないが、Phase 2Aのdoneフィードバックと同様に防御的に行う）。
     document.getElementById('doneRelativeGrowthItems').innerHTML = '';
     document.getElementById('doneRelativeGrowth').hidden = true;
+    // Phase 2D STEP 3: 次の生徒の履歴画面に前の生徒の結果が一瞬でも残らないよう、
+    // 明示的にクリアする（resetStudentDependentState_で既にstate/DOMともクリア済みだが、
+    // Phase 2Aと同様に防御的に行う）。
+    document.getElementById('historyList').innerHTML = '';
     goToStep('search');
   }
 
@@ -537,6 +687,10 @@
     saveAverageScore: saveAverageScore,
     backToTestsFromAverage: backToTestsFromAverage,
     backToAverageTests: backToAverageTests,
-    backToAverageForm: backToAverageForm
+    backToAverageForm: backToAverageForm,
+    // Phase 2D STEP 3: これまでの結果を見る
+    showScoreHistory: showScoreHistory,
+    backToTestsFromHistory: backToTestsFromHistory,
+    backToScoreHistory: backToScoreHistory
   };
 })();

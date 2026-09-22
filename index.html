@@ -22,7 +22,42 @@
   <div id="testList" class="tap-list"></div>
   <!-- Phase 2B STEP 5: 学年平均入力担当者のみ表示（isAverageInputMemberの結果でapp.jsがhiddenを切り替える）。 -->
   <button id="showAverageInputBtn" class="big-button secondary" hidden onclick="ScoreAppUi.showAverageInputTests()">学年平均を登録する</button>
+  <!-- Phase 2D STEP 3: 後日フィードバック（これまでの結果を見る）。既存点数登録を主導線のまま維持し、
+       独立した副導線として常時表示する（学年平均ボタンと異なり、担当者判定は不要＝誰でも自分の
+       結果を見られる）。 -->
+  <button id="showScoreHistoryBtn" class="big-button secondary" onclick="ScoreAppUi.showScoreHistory()">これまでの結果を見る</button>
   <button class="big-button secondary" onclick="ScoreAppUi.backToSearch()">生徒選択に戻る</button>
+</div>
+
+<!-- Phase 2D STEP 3: これまでの結果（履歴一覧）。通常点数入力(step-tests〜step-done)・
+     学年平均入力(step-avg-*)とは別画面・別state。本人確認画面は挟まない
+     （Phase 2D STEP 1/2確定仕様どおり、氏名検索→生徒選択という既存境界のまま）。 -->
+<div id="step-score-history" class="step">
+  <div class="selected-label" id="historyStudentLabel"></div>
+  <div class="hint">見たいテストを選んでください。</div>
+  <div id="historyMessage" class="message"></div>
+  <div id="historyList" class="tap-list"></div>
+  <button class="big-button secondary" onclick="ScoreAppUi.backToTestsFromHistory()">戻る</button>
+</div>
+
+<!-- Phase 2D STEP 3: 結果詳細。基本点数は履歴一覧のデータをそのまま表示し（追加API不要）、
+     Phase 2A feedback / Phase 2C relative growthは表示後に追加で取得する。 -->
+<div id="step-score-history-detail" class="step">
+  <div class="summary-row"><span>テスト</span><span id="hd_test"></span></div>
+  <div class="summary-row"><span>英語</span><span id="hd_english"></span></div>
+  <div class="summary-row"><span>数学</span><span id="hd_math"></span></div>
+  <div class="summary-row"><span>理科</span><span id="hd_science"></span></div>
+  <div class="summary-row"><span>社会</span><span id="hd_social"></span></div>
+  <div class="summary-row"><span>国語</span><span id="hd_japanese"></span></div>
+  <div class="summary-row"><span><strong>5教科合計</strong></span><span id="hd_total"></span></div>
+  <!-- Phase 2A: 自己成長フィードバック（renderDoneFeedback_と同じ共通helperで描画、ロジック複製なし）。 -->
+  <div id="historyFeedback" class="feedback-list"></div>
+  <!-- Phase 2C: 学年平均との相対成長（renderDoneRelativeGrowth_と同じ共通helperで描画、ロジック複製なし）。 -->
+  <div id="historyRelativeGrowth" class="relative-growth-list" hidden>
+    <div class="relative-growth-heading">参考：学年平均との比較</div>
+    <div id="historyRelativeGrowthItems"></div>
+  </div>
+  <button class="big-button secondary" onclick="ScoreAppUi.backToScoreHistory()">履歴一覧に戻る</button>
 </div>
 
 <!-- Phase 2B STEP 5: 学年平均入力（担当者のみ）。通常点数入力(step-tests〜step-done)とは別画面・別state。 -->
