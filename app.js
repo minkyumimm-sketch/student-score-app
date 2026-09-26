@@ -9,6 +9,16 @@
   var SUBJECT_KEYS = ['english', 'math', 'science', 'social', 'japanese']; // 既存GAS版と同じ順序
   // Phase 2C: 学年平均との相対成長の表示用ラベル。SUBJECT_KEYSと同じ並び順で使う。
   var SUBJECT_LABELS_ = { english: '英語', math: '数学', science: '理科', social: '社会', japanese: '国語' };
+  // R3-Public: 学年順位（任意）。keyはPrivate repoのScoreRepository.gs（SCORE_RANK_FIELDS）・
+  // PublicApi.gs（handleSubmitStudentScore_）と完全一致させる（別名を作らない）。
+  var RANK_FIELDS = [
+    { key: 'englishRank', id: 'r_english', label: '英語' },
+    { key: 'mathRank', id: 'r_math', label: '数学' },
+    { key: 'scienceRank', id: 'r_science', label: '理科' },
+    { key: 'socialRank', id: 'r_social', label: '社会' },
+    { key: 'japaneseRank', id: 'r_japanese', label: '国語' },
+    { key: 'totalRank', id: 'r_total', label: '5科合計' }
+  ];
   // クライアント側入力補助のみの上限値。サーバー側（validateScoreInput_）には意図的に
   // 上限チェックがない（配点が異なるテストに対応するため、既存の意図的仕様）ため、
   // ここでの100という値も入力のしやすさのためだけで、100点超の送信自体は拒否しない。
@@ -23,6 +33,7 @@
     availableTests: [],
     selectedTest: null, // {testId, testName}
     pendingSubjects: null, // 確認画面へ渡す直前に確定した5教科の入力値
+    pendingRanks: null, // R3-Public: 確認画面へ渡す直前に確定した学年順位6項目の入力値（すべて任意）
     // Phase 2B STEP 5: 学年平均入力用のstate。通常点数入力state（上記4項目）とは
     // 完全に分離し、混線させない（通常フローのロジックはこれらを一切参照しない）。
     isAverageMember: false,
@@ -43,6 +54,7 @@
     state.availableTests = [];
     state.selectedTest = null;
     state.pendingSubjects = null;
+    state.pendingRanks = null;
     // Phase 2B STEP 5: 担当者判定・平均入力の状態も同じ理由で必ずクリアする。
     state.isAverageMember = false;
     state.averageAvailableTests = [];
@@ -192,6 +204,9 @@
     SUBJECT_KEYS.forEach(function (key) {
       document.getElementById('s_' + key).value = '';
     });
+    RANK_FIELDS.forEach(function (f) {
+      document.getElementById(f.id).value = '';
+    });
     showMessage('scoreMessage', '', '');
     goToStep('score');
   }
@@ -204,6 +219,17 @@
       subjects[key] = document.getElementById('s_' + key).value.trim();
     });
     return subjects;
+  }
+
+  // R3-Public: 学年順位（任意）。空欄はそのまま返す（未入力=null、Private側validateRankInput_と
+  // 同じ扱い）。ここでのvalidationは送信前のUX補助であり、正本はサーバー側
+  // （PublicApi.gs -> createScore -> validateRankInput_）が引き続き担う多層防御構成。
+  function collectRanks_() {
+    var ranks = {};
+    RANK_FIELDS.forEach(function (f) {
+      ranks[f.key] = document.getElementById(f.id).value.trim();
+    });
+    return ranks;
   }
 
   // クライアント側validationはUX用（早期に気づかせるためだけ）であり、正本はGAS側の
@@ -223,9 +249,22 @@
       showMessage('scoreMessage', '', '点数は0以上の数値で入力してください。');
       return;
     }
+
+    var ranks = collectRanks_();
+    var invalidRank = RANK_FIELDS.some(function (f) {
+      var v = ranks[f.key];
+      if (v === '') return false;
+      var n = Number(v);
+      return isNaN(n) || !isFinite(n) || !Number.isInteger(n) || n <= 0;
+    });
+    if (invalidRank) {
+      showMessage('scoreMessage', '', '学年順位は1以上の整数で入力してください（分からない教科は空欄のままでOKです）。');
+      return;
+    }
     showMessage('scoreMessage', '', '');
 
     state.pendingSubjects = subjects;
+    state.pendingRanks = ranks;
     var total = 0;
     document.getElementById('c_student').textContent = state.selectedStudent.displayName;
     document.getElementById('c_test').textContent = state.selectedTest.testName;
@@ -235,6 +274,28 @@
       if (value !== '') total += Number(value);
     });
     document.getElementById('c_total').textContent = total + '点';
+
+    // 順位は「1つ以上入力されている場合だけ」セクションごと表示し、入力された項目だけを並べる
+    // （未入力の項目まで「未入力」と表示して確認画面を無駄に長くしない）。
+    var rankRows = document.getElementById('c_rankRows');
+    rankRows.innerHTML = '';
+    var hasAnyRank = false;
+    RANK_FIELDS.forEach(function (f) {
+      var value = ranks[f.key];
+      if (value === '') return;
+      hasAnyRank = true;
+      var row = document.createElement('div');
+      row.className = 'summary-row';
+      var labelSpan = document.createElement('span');
+      labelSpan.textContent = f.label;
+      var valueSpan = document.createElement('span');
+      valueSpan.textContent = value + '位';
+      row.appendChild(labelSpan);
+      row.appendChild(valueSpan);
+      rankRows.appendChild(row);
+    });
+    document.getElementById('c_rankSection').style.display = hasAnyRank ? 'block' : 'none';
+
     showMessage('confirmMessage', '', '');
     goToStep('confirm');
   }
@@ -243,6 +304,7 @@
 
   function submitScore() {
     var subjects = state.pendingSubjects;
+    var ranks = state.pendingRanks || {};
     var btn = document.getElementById('submitScoreBtn');
     btn.disabled = true;
     showMessage('confirmMessage', 'info', '登録中…');
@@ -254,7 +316,13 @@
       math: subjects.math,
       science: subjects.science,
       social: subjects.social,
-      japanese: subjects.japanese
+      japanese: subjects.japanese,
+      englishRank: ranks.englishRank,
+      mathRank: ranks.mathRank,
+      scienceRank: ranks.scienceRank,
+      socialRank: ranks.socialRank,
+      japaneseRank: ranks.japaneseRank,
+      totalRank: ranks.totalRank
     };
 
     ScoreApi.post('submitStudentScore', payload).then(function (result) {

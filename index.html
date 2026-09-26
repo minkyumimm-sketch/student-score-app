@@ -109,6 +109,15 @@
   <div class="subject-row"><label>理科</label><input type="number" inputmode="decimal" id="s_science" /></div>
   <div class="subject-row"><label>社会</label><input type="number" inputmode="decimal" id="s_social" /></div>
   <div class="subject-row"><label>国語</label><input type="number" inputmode="decimal" id="s_japanese" /></div>
+
+  <div class="hint" style="margin-top:20px;">学年順位（任意・分かる教科だけ入力してください）</div>
+  <div class="subject-row"><label>英語</label><span style="display:flex;align-items:center;gap:4px;"><input type="number" min="1" step="1" inputmode="numeric" id="r_english" style="width:90px;" /><span>位</span></span></div>
+  <div class="subject-row"><label>数学</label><span style="display:flex;align-items:center;gap:4px;"><input type="number" min="1" step="1" inputmode="numeric" id="r_math" style="width:90px;" /><span>位</span></span></div>
+  <div class="subject-row"><label>理科</label><span style="display:flex;align-items:center;gap:4px;"><input type="number" min="1" step="1" inputmode="numeric" id="r_science" style="width:90px;" /><span>位</span></span></div>
+  <div class="subject-row"><label>社会</label><span style="display:flex;align-items:center;gap:4px;"><input type="number" min="1" step="1" inputmode="numeric" id="r_social" style="width:90px;" /><span>位</span></span></div>
+  <div class="subject-row"><label>国語</label><span style="display:flex;align-items:center;gap:4px;"><input type="number" min="1" step="1" inputmode="numeric" id="r_japanese" style="width:90px;" /><span>位</span></span></div>
+  <div class="subject-row"><label>5科合計</label><span style="display:flex;align-items:center;gap:4px;"><input type="number" min="1" step="1" inputmode="numeric" id="r_total" style="width:90px;" /><span>位</span></span></div>
+
   <div id="scoreMessage" class="message"></div>
   <button class="big-button" onclick="ScoreAppUi.goToConfirm()">確認する</button>
   <button class="big-button secondary" onclick="ScoreAppUi.backToTests()">戻る</button>
@@ -124,6 +133,10 @@
   <div class="summary-row"><span>社会</span><span id="c_social"></span></div>
   <div class="summary-row"><span>国語</span><span id="c_japanese"></span></div>
   <div class="summary-row"><span><strong>合計</strong></span><span id="c_total"></span></div>
+  <div id="c_rankSection" style="display:none;">
+    <div class="hint" style="margin-top:14px;">学年順位</div>
+    <div id="c_rankRows"></div>
+  </div>
   <div id="confirmMessage" class="message"></div>
   <button class="big-button" id="submitScoreBtn" onclick="ScoreAppUi.submitScore()">登録する</button>
   <button class="big-button secondary" onclick="ScoreAppUi.backToScore()">修正する</button>
