@@ -237,9 +237,11 @@
   // （既存の意図的仕様、配点が異なるテストに対応するため）。
   function goToConfirm() {
     var subjects = collectSubjects_();
-    var hasAny = SUBJECT_KEYS.some(function (key) { return subjects[key] !== ''; });
-    if (!hasAny) {
-      showMessage('scoreMessage', '', '教科の点数を少なくとも1つ入力してください。');
+    // STEP A: 生徒による新規登録は5科目すべて必須（UX用チェック、正本はサーバー側
+    // validateStudentNewScoreInput_）。0点は入力済みとして扱う（=== ''のみ未入力判定）。
+    var hasMissing = SUBJECT_KEYS.some(function (key) { return subjects[key] === ''; });
+    if (hasMissing) {
+      showMessage('scoreMessage', '', '5科目すべての点数を入力してください。');
       return;
     }
     var invalid = SUBJECT_KEYS.some(function (key) {
