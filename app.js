@@ -52,6 +52,9 @@
     averageAvailableTests: [],
     averageSelectedTest: null, // {testId, testName}
     averagePendingSubjects: null,
+    // STEP C: 楽観的ロック用。getSchoolGradeAverageが返したupdated_at(nullまたはISO文字列)を
+    // 保持し、保存時にそのままexpectedUpdatedAtとして送り返す。
+    averageExpectedUpdatedAt: null,
     // Phase 2D STEP 3: 後日フィードバック（これまでの結果を見る）用のstate。
     // 通常点数入力state・学年平均入力stateとは完全に分離し、混線させない。
     scoreHistory: [],
@@ -72,6 +75,7 @@
     state.averageAvailableTests = [];
     state.averageSelectedTest = null;
     state.averagePendingSubjects = null;
+    state.averageExpectedUpdatedAt = null;
     var averageButton = document.getElementById('showAverageInputBtn');
     if (averageButton) averageButton.hidden = true;
     // Phase 2D STEP 3: 生徒を選び直したときに、前の生徒の結果履歴・選択中の詳細を必ずクリアする
@@ -672,6 +676,10 @@
   // 既存平均の取得に失敗しても空欄のまま入力を継続できるようにする（保存自体は妨げない）。
   function selectAverageTest_(t) {
     state.averageSelectedTest = t;
+    // STEP C: 取得前はnull(=「まだレコードが存在しないはず」)にしておく。取得が失敗した場合
+    // もnullのままとなり、保存時にサーバー側がそれを基準に競合判定する（実際に既存レコードが
+    // あればCONFLICTとして安全側に拒否される。無言の上書きより安全なfail-safe）。
+    state.averageExpectedUpdatedAt = null;
     document.getElementById('avgFormLabel').textContent = t.testName;
     SUBJECT_KEYS.forEach(function (key) {
       document.getElementById('avg_' + key).value = '';
@@ -684,8 +692,9 @@
         // 取得結果が返ってくる前に選択テストが切り替わっていたら反映しない。
         if (!state.averageSelectedTest || state.averageSelectedTest.testId !== t.testId) return;
         showMessage('avgFormMessage', '', '');
-        if (!result.ok || !result.average) return; // 未登録、または取得失敗時は空欄のまま
+        if (!result.ok || !result.average) return; // 未登録、または取得失敗時は空欄のまま(expectedUpdatedAtもnullのまま)
         var avg = result.average;
+        state.averageExpectedUpdatedAt = avg.updated_at;
         SUBJECT_KEYS.forEach(function (key) {
           // サーバーはnull(未登録科目)または数値を返す。nullを"0"等へ変換しない。
           var value = avg[key];
@@ -742,6 +751,9 @@
 
     // 保存先の特定はstudentId+testIdのみ。school_id/gradeはクライアントから送らない
     // （サーバー側でstudentIdから毎回再解決する設計、AverageInputService.gs参照）。
+    // STEP C: expectedUpdatedAtを必ず含める(nullも明示的に送る)。複数の平均点担当者が
+    // 同時に同じschool×grade×testを編集しても、古い画面からの保存が無言で最新値を
+    // 上書きしないようにするための楽観的ロック。
     var payload = {
       studentId: state.selectedStudent.studentId,
       testId: state.averageSelectedTest.testId,
@@ -749,14 +761,23 @@
       math: subjects.math,
       science: subjects.science,
       social: subjects.social,
-      japanese: subjects.japanese
+      japanese: subjects.japanese,
+      expectedUpdatedAt: state.averageExpectedUpdatedAt
     };
 
     ScoreApi.post('saveSchoolGradeAverage', payload, window.SCORE_APP_CONFIG.AVERAGE_API_BASE_URL).then(function (result) {
       btn.disabled = false;
       if (!result.ok) {
-        // 失敗時は完了画面へ進まない（権限なし・対象外テスト・validation失敗・通信失敗のいずれも
-        // 確認画面に留まって再操作を促す。通常点数入力のsubmitScoreと同じ方針）。
+        // STEP C: 競合(CONFLICT)の場合は、古い値のまま突き進ませず最新データを自動で
+        // 読み直す（selectAverageTest_を再利用し、expectedUpdatedAtも最新化される）。
+        // ユーザーは入力画面に戻り、最新値を確認してから編集・保存し直す。
+        if (result.errorCode === 'CONFLICT') {
+          showMessage('avgConfirmMessage', '', result.error);
+          selectAverageTest_(state.averageSelectedTest);
+          return;
+        }
+        // それ以外の失敗（権限なし・対象外テスト・validation失敗・通信失敗）は既存どおり
+        // 確認画面に留まって再操作を促す（通常点数入力のsubmitScoreと同じ方針）。
         showMessage('avgConfirmMessage', '', result.error + '\n直し方が分からない場合は先生に伝えてください。');
         return;
       }
