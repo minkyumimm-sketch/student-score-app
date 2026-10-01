@@ -57,6 +57,18 @@
     <div class="relative-growth-heading">参考：学年平均との比較</div>
     <div id="historyRelativeGrowthItems"></div>
   </div>
+  <!-- STEP B: 学年順位の後追い入力・訂正。step-scoreの順位入力(r_*)と同じUI規約を使うが、
+       同一画面内に両方のブロックが常時DOMへ存在するため、id衝突を避けて別id(hdr_*)にする。
+       既存順位があれば現在値を表示、未登録なら空欄。6項目とも任意、1項目だけの保存も可能。 -->
+  <div class="hint" style="margin-top:20px;">学年順位（任意・分かる教科だけ入力・訂正してください）</div>
+  <div class="subject-row"><label>英語</label><span style="display:flex;align-items:center;gap:4px;"><input type="number" min="1" step="1" inputmode="numeric" id="hdr_english" style="width:90px;" /><span>位</span></span></div>
+  <div class="subject-row"><label>数学</label><span style="display:flex;align-items:center;gap:4px;"><input type="number" min="1" step="1" inputmode="numeric" id="hdr_math" style="width:90px;" /><span>位</span></span></div>
+  <div class="subject-row"><label>理科</label><span style="display:flex;align-items:center;gap:4px;"><input type="number" min="1" step="1" inputmode="numeric" id="hdr_science" style="width:90px;" /><span>位</span></span></div>
+  <div class="subject-row"><label>社会</label><span style="display:flex;align-items:center;gap:4px;"><input type="number" min="1" step="1" inputmode="numeric" id="hdr_social" style="width:90px;" /><span>位</span></span></div>
+  <div class="subject-row"><label>国語</label><span style="display:flex;align-items:center;gap:4px;"><input type="number" min="1" step="1" inputmode="numeric" id="hdr_japanese" style="width:90px;" /><span>位</span></span></div>
+  <div class="subject-row"><label>5科合計</label><span style="display:flex;align-items:center;gap:4px;"><input type="number" min="1" step="1" inputmode="numeric" id="hdr_total" style="width:90px;" /><span>位</span></span></div>
+  <div id="hdRankMessage" class="message"></div>
+  <button class="big-button" id="saveHistoryRankBtn" onclick="ScoreAppUi.saveHistoryRank()">順位を保存する</button>
   <button class="big-button secondary" onclick="ScoreAppUi.backToScoreHistory()">履歴一覧に戻る</button>
 </div>
 

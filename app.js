@@ -19,6 +19,18 @@
     { key: 'japaneseRank', id: 'r_japanese', label: '国語' },
     { key: 'totalRank', id: 'r_total', label: '5科合計' }
   ];
+  // STEP B: 学年順位の後追い入力（結果詳細画面）。RANK_FIELDSと同じkey・同じ並び順だが、
+  // 同一DOM内でstep-scoreの入力欄(r_*)と共存するためid・safe response上のkeyを分けている。
+  // snakeKeyはPrivate repoのmapScoreHistoryEntryForExternalApi_が返すsnake_caseフィールド名
+  // （既存のcamelCase keyとは別名、複製ではなく変換のためのペア定義）。
+  var HISTORY_RANK_FIELDS = [
+    { key: 'englishRank', snakeKey: 'english_rank', id: 'hdr_english', label: '英語' },
+    { key: 'mathRank', snakeKey: 'math_rank', id: 'hdr_math', label: '数学' },
+    { key: 'scienceRank', snakeKey: 'science_rank', id: 'hdr_science', label: '理科' },
+    { key: 'socialRank', snakeKey: 'social_rank', id: 'hdr_social', label: '社会' },
+    { key: 'japaneseRank', snakeKey: 'japanese_rank', id: 'hdr_japanese', label: '国語' },
+    { key: 'totalRank', snakeKey: 'total_rank', id: 'hdr_total', label: '5科合計' }
+  ];
   // クライアント側入力補助のみの上限値。サーバー側（validateScoreInput_）には意図的に
   // 上限チェックがない（配点が異なるテストに対応するため、既存の意図的仕様）ため、
   // ここでの100という値も入力のしやすさのためだけで、100点超の送信自体は拒否しない。
@@ -503,10 +515,20 @@
       document.getElementById('hd_' + key).textContent = formatHistoryPointValue_(entry[key]);
     });
     document.getElementById('hd_total').textContent = formatHistoryPointValue_(entry.five_subject_total);
+    fillHistoryRankInputs_(entry);
+    showMessage('hdRankMessage', '', '');
 
     goToStep('score-history-detail');
     fetchHistoryFeedback_(entry.test_id);
     fetchHistoryRelativeGrowth_(entry.test_id);
+  }
+
+  // STEP B: 既存順位があれば現在値を入力欄へ、未登録(null)なら空欄にする。
+  function fillHistoryRankInputs_(entry) {
+    HISTORY_RANK_FIELDS.forEach(function (f) {
+      var value = entry[f.snakeKey];
+      document.getElementById(f.id).value = (typeof value === 'number') ? String(value) : '';
+    });
   }
 
   // Phase 2A feedbackの後日取得。renderDoneFeedback_と同じrenderFeedbackList_を再利用するだけで、
@@ -531,6 +553,66 @@
       if (!state.selectedStudent || state.selectedStudent.studentId !== studentId) return;
       if (!state.selectedHistoryEntry || state.selectedHistoryEntry.test_id !== testId) return;
       renderRelativeGrowthList_('historyRelativeGrowth', 'historyRelativeGrowthItems', result.ok ? result.relativeGrowth : null);
+    });
+  }
+
+  // STEP B: 学年順位の後追い入力・訂正の保存。点数5科目は一切再送信しない
+  // （payloadに含めない＝サーバー側updateScoreRankも点数列には触れない既存設計）。
+  // クライアント側validationはgoToConfirmの順位validationと同じルール（UX用、正本はサーバー側
+  // validateRankInput_）。保存中は二重送信防止のためボタンをdisabledにする。
+  function saveHistoryRank_() {
+    var ranks = {};
+    HISTORY_RANK_FIELDS.forEach(function (f) {
+      ranks[f.key] = document.getElementById(f.id).value.trim();
+    });
+    var invalidRank = HISTORY_RANK_FIELDS.some(function (f) {
+      var v = ranks[f.key];
+      if (v === '') return false;
+      var n = Number(v);
+      return isNaN(n) || !isFinite(n) || !Number.isInteger(n) || n <= 0;
+    });
+    if (invalidRank) {
+      showMessage('hdRankMessage', '', '学年順位は1以上の整数で入力してください（分からない教科は空欄のままでOKです）。');
+      return;
+    }
+
+    var studentId = state.selectedStudent.studentId;
+    var testId = state.selectedHistoryEntry.test_id;
+    var btn = document.getElementById('saveHistoryRankBtn');
+    btn.disabled = true;
+    showMessage('hdRankMessage', 'info', '保存中…');
+
+    var payload = {
+      studentId: studentId,
+      testId: testId,
+      englishRank: ranks.englishRank,
+      mathRank: ranks.mathRank,
+      scienceRank: ranks.scienceRank,
+      socialRank: ranks.socialRank,
+      japaneseRank: ranks.japaneseRank,
+      totalRank: ranks.totalRank
+    };
+
+    ScoreApi.post('saveScoreRank', payload).then(function (result) {
+      btn.disabled = false;
+      // 応答が返る前に別の生徒・別のテストへ切り替わっていたら反映しない（fetchHistoryFeedback_等と同じstale防止）。
+      if (!state.selectedStudent || state.selectedStudent.studentId !== studentId) return;
+      if (!state.selectedHistoryEntry || state.selectedHistoryEntry.test_id !== testId) return;
+
+      if (!result.ok) {
+        showMessage('hdRankMessage', '', result.error + '\n直し方が分からない場合は先生に伝えてください。');
+        return;
+      }
+
+      // 保存成功後、サーバーが返した最新値(result.history)を正本として画面・stateへ反映する
+      // （O-1/O-2で起きた「保存後に再取得されず古い表示が残る」問題の再発を防ぐため、
+      // 別途GETし直すのではなく、この保存レスポンス自体を正本として使う設計）。
+      // feedback/relative growthブロックには一切触れない（不必要に消したり再取得しない）。
+      state.selectedHistoryEntry = result.history;
+      var idx = state.scoreHistory.findIndex(function (e) { return e.test_id === testId; });
+      if (idx !== -1) state.scoreHistory[idx] = result.history;
+      fillHistoryRankInputs_(result.history);
+      showMessage('hdRankMessage', 'success', '学年順位を保存しました。');
     });
   }
 
@@ -761,6 +843,8 @@
     // Phase 2D STEP 3: これまでの結果を見る
     showScoreHistory: showScoreHistory,
     backToTestsFromHistory: backToTestsFromHistory,
-    backToScoreHistory: backToScoreHistory
+    backToScoreHistory: backToScoreHistory,
+    // STEP B: 学年順位の後追い入力
+    saveHistoryRank: saveHistoryRank_
   };
 })();
