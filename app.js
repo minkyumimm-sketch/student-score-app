@@ -424,35 +424,56 @@
   // comparable:trueの項目（5教科合計・各科目）だけを表示対象として文字列化する。
   // ランキング・偏差値・順位には一切触れず、「学年平均との差が前回からどれだけ変化したか」
   // という数値（difference_change）のみを、悪化/下がった等の断定的な言葉を使わずに示す。
+  // STEP RG-2: 「今回本人点と今回平均との差」(current_gap)を第一に表示する。前回データが
+  // 欠損していても今回分の比較までは消さない（current_comparable===trueの行は必ず表示する）。
+  // 前回との推移(gapChange/difference_change)は、前回も含めて比較可能(comparable===true)な
+  // 場合だけ追加で括弧書きする。T0006本人点とT0002平均のような異なるテスト同士の比較や、
+  // student_masterの現在学年による過去の無条件補完は、サーバー側(ScoreRelativeGrowthService.gs)
+  // が一切行わない設計のため、ここでも行わない（取得したcurrent_gap/difference_changeを
+  // そのまま文言化するだけ）。
   function collectRelativeGrowthLines_(relativeGrowth) {
     if (!relativeGrowth || typeof relativeGrowth !== 'object') return [];
     var lines = [];
-    if (relativeGrowth.five_subject && relativeGrowth.five_subject.comparable === true) {
-      lines.push('5教科合計：学年平均との差の変化 ' + formatRelativeGrowthDiff_(relativeGrowth.five_subject.difference_change) + '点');
+    function pushLine(label, fact) {
+      if (!fact || fact.current_comparable !== true) return; // current比較不可の行は表示しない
+      var text = label + '：' + formatRelativeGrowthGap_(fact.current_gap);
+      if (fact.comparable === true) {
+        text += '（' + formatRelativeGrowthChange_(fact.difference_change) + '）';
+      }
+      lines.push(text);
     }
+    pushLine('5教科合計', relativeGrowth.five_subject);
     var subjects = relativeGrowth.subjects;
     if (subjects) {
-      SUBJECT_KEYS.forEach(function (key) {
-        var subject = subjects[key];
-        if (subject && subject.comparable === true) {
-          lines.push(SUBJECT_LABELS_[key] + '：学年平均との差の変化 ' + formatRelativeGrowthDiff_(subject.difference_change) + '点');
-        }
-      });
+      SUBJECT_KEYS.forEach(function (key) { pushLine(SUBJECT_LABELS_[key], subjects[key]); });
     }
     return lines;
   }
 
-  // 符号付き・小数第1位までに丸め、末尾の".0"は取り除く（例: 2.0→"+2", 2.5→"+2.5", -1→"-1"）。
-  // difference_changeはサーバー側の設計上NaN/Infinityにならないが、万一の異常値でも
-  // 画面を壊さないよう防御的に0扱いする。
-  function formatRelativeGrowthDiff_(value) {
-    if (typeof value !== 'number' || !isFinite(value)) return '0';
+  // 小数第1位までに丸め、末尾の".0"を除去した絶対値の文字列表現と符号を返す共通helper。
+  // ±0.05未満は0扱い（誤差吸収）。current_gap/difference_changeはサーバー側の設計上
+  // NaN/Infinityにならないが、万一の異常値でも画面を壊さないよう呼び出し側で防御する。
+  function formatMagnitude_(value) {
     var rounded = Math.round(value * 10) / 10;
-    if (Math.abs(rounded) < 0.05) rounded = 0; // -0表示・誤差吸収
-    var text = Math.abs(rounded).toFixed(1).replace(/\.0$/, '');
-    if (rounded > 0) return '+' + text;
-    if (rounded < 0) return '-' + text;
-    return text;
+    if (Math.abs(rounded) < 0.05) rounded = 0;
+    return { rounded: rounded, text: Math.abs(rounded).toFixed(1).replace(/\.0$/, '') };
+  }
+
+  // 今回本人点と今回平均との差（current_gap）の文言。正なら「学年平均よりX点上」、
+  // 負なら「学年平均よりX点下」、0なら「学年平均と同じ」。
+  function formatRelativeGrowthGap_(value) {
+    if (typeof value !== 'number' || !isFinite(value)) return '学年平均と同じ';
+    var m = formatMagnitude_(value);
+    if (m.rounded === 0) return '学年平均と同じ';
+    return '学年平均より' + m.text + '点' + (m.rounded > 0 ? '上' : '下');
+  }
+
+  // 前回との推移（difference_change）の文言。正はUP、負はDOWN、0は変化なし。
+  function formatRelativeGrowthChange_(value) {
+    if (typeof value !== 'number' || !isFinite(value)) return '前回より変化なし';
+    var m = formatMagnitude_(value);
+    if (m.rounded === 0) return '前回より変化なし';
+    return '前回より' + m.text + '点' + (m.rounded > 0 ? 'UP' : 'DOWN');
   }
 
   // ===== Phase 2D STEP 3: これまでの結果を見る（後日フィードバック） =====
