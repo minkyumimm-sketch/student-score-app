@@ -63,6 +63,43 @@
 
   var searchTimer = null;
 
+  // PERF-4C(案B): 検索候補1位の生徒だけ、候補表示が完了した「後」にbackgroundで
+  // listAvailableTestsをpreloadする。stateオブジェクトとは意図的に分離する
+  // （resetStudentDependentState_によるリセットへ巻き込まれないようにするため。
+  // PERF-4Bのモデル検証で確認済みの設計）。searchScoreEntryStudentsのレスポンス生成・
+  // renderStudentListの描画処理自体には一切手を加えない（検索クリティカルパス不変）。
+  var TOP_CANDIDATE_PRELOAD_TTL_MS = 5000; // PERF-4B比較検討により採用した値。断定的な最適値ではない。
+  var topCandidatePreload_ = null; // { studentId, promise, status: 'pending'|'resolved'|'failed', result, timestamp }
+
+  function isTopCandidatePreloadFresh_(entry) {
+    return !!entry && (Date.now() - entry.timestamp) < TOP_CANDIDATE_PRELOAD_TTL_MS;
+  }
+
+  function startTopCandidatePreload_(studentId) {
+    var entry = { studentId: studentId, status: 'pending', result: null, timestamp: Date.now() };
+    entry.promise = ScoreApi.get('listAvailableTests', { studentId: studentId }).then(function (result) {
+      entry.status = 'resolved';
+      entry.result = result;
+      return result;
+    }, function (err) {
+      entry.status = 'failed';
+      throw err;
+    });
+    entry.promise.catch(function () {}); // preloadは裏方のため、誰も拾わなくてもunhandled rejectionにしない。
+    topCandidatePreload_ = entry;
+  }
+
+  // 同じ検索候補1位が続けて現れる場合（名前を1文字ずつ入力する間、上位候補が変わらないことが多い）に
+  // 重複GETを発行しないための判定。新しい候補1位が現れたとき、または有効期限切れのときだけ再発火する。
+  function maybeStartTopCandidatePreload_(students) {
+    if (!students.length) return;
+    var topId = students[0].studentId;
+    if (topCandidatePreload_ && topCandidatePreload_.studentId === topId && isTopCandidatePreloadFresh_(topCandidatePreload_)) {
+      return;
+    }
+    startTopCandidatePreload_(topId);
+  }
+
   function resetStudentDependentState_() {
     // 生徒を選び直したときに、前の生徒のテスト一覧・入力途中の点数を必ずクリアする
     // （共用タブレットのため、次の生徒へ前の生徒の情報を引き継がない）。
@@ -141,6 +178,9 @@
           return;
         }
         renderStudentList(result.students);
+        // PERF-4C(案B): 候補表示が完了した後にだけpreloadを開始する（検索のcritical pathには
+        // 一切影響しない。renderStudentListは同期的なDOM描画のみのため、この時点で描画は完了済み）。
+        maybeStartTopCandidatePreload_(result.students);
       });
     }, SEARCH_DEBOUNCE_MS);
   }
@@ -188,17 +228,45 @@
 
   // ===== Step 2: 入力可能テスト一覧 =====
 
+  // PERF-4C(案B): 応答が返ってくる前に別の生徒へ切り替わっていたら、古い結果を反映しない
+  // （checkAverageInputMember_等、既存の他箇所と同じstaleガードの考え方。preload共有により
+  // 応答到着までの時間が従来より延びる可能性があるため、このガードを新設する）。
+  function applyAvailableTestsResult_(studentId, result) {
+    if (!state.selectedStudent || state.selectedStudent.studentId !== studentId) return;
+    if (!result.ok) {
+      showMessage('testsMessage', '', result.error);
+      return;
+    }
+    showMessage('testsMessage', '', '');
+    state.availableTests = result.tests;
+    renderTestList();
+    goToStep('tests');
+  }
+
   function loadAvailableTests() {
     showMessage('testsMessage', 'info', '読み込み中…');
-    ScoreApi.get('listAvailableTests', { studentId: state.selectedStudent.studentId }).then(function (result) {
-      if (!result.ok) {
-        showMessage('testsMessage', '', result.error);
-        return;
-      }
-      showMessage('testsMessage', '', '');
-      state.availableTests = result.tests;
-      renderTestList();
-      goToStep('tests');
+    var studentId = state.selectedStudent.studentId;
+    // PERF-4C(案B): 検索候補1位としてpreload済み/preload中の生徒を選んだ場合は、
+    // 新規GETを発行せずpreloadの結果(または進行中のPromise)をそのまま使う。
+    // 対象外・期限切れ・preload失敗時は、従来どおりの新規GETへ安全にfallbackする。
+    var freshEntry = (topCandidatePreload_ && topCandidatePreload_.studentId === studentId && isTopCandidatePreloadFresh_(topCandidatePreload_)) ? topCandidatePreload_ : null;
+
+    if (freshEntry && freshEntry.status === 'resolved') {
+      applyAvailableTestsResult_(studentId, freshEntry.result);
+      return;
+    }
+    if (freshEntry && freshEntry.status === 'pending') {
+      freshEntry.promise.then(function (result) {
+        applyAvailableTestsResult_(studentId, result);
+      }, function () {
+        ScoreApi.get('listAvailableTests', { studentId: studentId }).then(function (result) {
+          applyAvailableTestsResult_(studentId, result);
+        });
+      });
+      return;
+    }
+    ScoreApi.get('listAvailableTests', { studentId: studentId }).then(function (result) {
+      applyAvailableTestsResult_(studentId, result);
     });
   }
 
