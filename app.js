@@ -132,6 +132,10 @@
     }
     searchTimer = setTimeout(function () {
       ScoreApi.get('searchScoreEntryStudents', { keyword: keyword }).then(function (result) {
+        // PERF-3B: 応答が返ってくる前に検索語が変わっていたら、古い応答を反映しない
+        // （stale response guard。checkAverageInputMember_等、他箇所の既存パターンと同じ考え方）。
+        var currentKeyword = document.getElementById('studentSearch').value.trim();
+        if (currentKeyword !== keyword) return;
         if (!result.ok) {
           container.textContent = result.error;
           return;
@@ -865,7 +869,17 @@
     goToStep('search');
   }
 
+  // PERF-3B: ページ読み込み直後に、Spreadsheetへ一切アクセスしない軽量なping action
+  // （PublicApi.gsのhandleGetPing_）を1回投げ、ユーザーが生徒検索欄へ入力を始める前に
+  // GAS Web Appのcold start分を先取りする。結果は一切使わない(fire-and-forget)。
+  // ScoreApi.getは内部でfetch失敗もok:falseへ正規化し例外を投げないため、ここでも
+  // .catch等は不要（失敗してもUIには一切影響しない）。
+  function warmUpApi_() {
+    ScoreApi.get('ping', {});
+  }
+
   applyScoreInputRange_();
+  warmUpApi_();
 
   window.ScoreAppUi = {
     onStudentSearchInput: onStudentSearchInput,
