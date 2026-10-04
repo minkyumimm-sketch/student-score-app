@@ -63,6 +63,13 @@
 
   var searchTimer = null;
 
+  // UX-INPUT-2: 検索画面へ入るたびにstudentSearchへfocusするためのhelper。
+  // focusするだけで、検索APIの発火・debounce・候補一覧には一切触れない。
+  function focusStudentSearch_() {
+    var el = document.getElementById('studentSearch');
+    if (el) el.focus();
+  }
+
   // PERF-4C(案B): 検索候補1位の生徒だけ、候補表示が完了した「後」にbackgroundで
   // listAvailableTestsをpreloadする。stateオブジェクトとは意図的に分離する
   // （resetStudentDependentState_によるリセットへ巻き込まれないようにするため。
@@ -912,6 +919,7 @@
     resetStudentDependentState_();
     state.selectedStudent = null;
     goToStep('search');
+    focusStudentSearch_(); // UX-INPUT-2: 検索語・候補はこれまでどおり保持したまま、focusだけ当てる。
   }
 
   function backToTests() {
@@ -941,6 +949,7 @@
     // Phase 2Aと同様に防御的に行う）。
     document.getElementById('historyList').innerHTML = '';
     goToStep('search');
+    focusStudentSearch_(); // UX-INPUT-2: 検索語・候補のclearはこれまでどおり維持したうえでfocusを当てる。
   }
 
   // PERF-3B: ページ読み込み直後に、Spreadsheetへ一切アクセスしない軽量なping action
@@ -952,8 +961,42 @@
     ScoreApi.get('ping', {});
   }
 
+  // UX-INPUT-2: 5科目+順位欄のEnterキー移動対象を、既存の正本配列SUBJECT_KEYS/RANK_FIELDSから
+  // 動的に導出する（11個のIDを別定数として二重管理しない。将来の科目数・順位欄変更にも
+  // そのまま追従する）。並び順はDOM上の既存入力順（english→math→science→social→japanese→
+  // englishRank→mathRank→scienceRank→socialRank→japaneseRank→totalRank）と完全に一致する。
+  function buildScoreEnterNavigationIds_() {
+    var ids = SUBJECT_KEYS.map(function (key) { return 's_' + key; });
+    RANK_FIELDS.forEach(function (f) { ids.push(f.id); });
+    return ids;
+  }
+
+  // UX-INPUT-2: 5科目+順位欄をEnterキーで既存入力順どおり次へfocus移動するためのsetup。
+  // 桁数・inputイベント・blur・入力値による自動advanceは一切行わない（Enterキーの明示的な
+  // 押下のみで移動する）。最終欄(r_total)のEnterは「確認する」button(scoreConfirmBtn)へ
+  // focusを移すだけで、goToConfirm()・submitScore()・ScoreApi.post()のいずれも直接呼ばない
+  // （確認画面への遷移・保存は、button側の標準動作またはユーザーの別操作に委ねる）。
+  function setupScoreFieldEnterNavigation_() {
+    var ids = buildScoreEnterNavigationIds_();
+    ids.forEach(function (id, index) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('keydown', function (event) {
+        if (event.key !== 'Enter') return;
+        if (event.isComposing || event.keyCode === 229) return; // IME変換確定のEnterは無視する。
+        if (event.repeat) return; // 長押しによるkeydown連続発火で複数欄分移動しないようにする。
+        event.preventDefault();
+        var nextId = ids[index + 1];
+        var nextEl = nextId ? document.getElementById(nextId) : document.getElementById('scoreConfirmBtn');
+        if (nextEl) nextEl.focus();
+      });
+    });
+  }
+
   applyScoreInputRange_();
   warmUpApi_();
+  focusStudentSearch_();
+  setupScoreFieldEnterNavigation_();
 
   window.ScoreAppUi = {
     onStudentSearchInput: onStudentSearchInput,
