@@ -508,6 +508,12 @@
     var lines = [];
     function pushLine(label, fact) {
       if (!fact || fact.current_comparable !== true) return; // current比較不可の行は表示しない
+      // UI-AVG-1: 平均点を上回っている場合だけ表示する（同点・未満は非表示、代替文言も出さない）。
+      // 表示文言(formatRelativeGrowthGap_)と同じ丸め処理(formatMagnitude_)で判定することで、
+      // 「丸めると同点扱いになる値」が「学年平均と同じ」という文言で表示されてしまう事故を防ぐ
+      // （表示の可否と表示文言の基準を一致させる）。
+      if (typeof fact.current_gap !== 'number' || !isFinite(fact.current_gap)) return;
+      if (formatMagnitude_(fact.current_gap).rounded <= 0) return;
       var text = label + '：' + formatRelativeGrowthGap_(fact.current_gap);
       if (fact.comparable === true) {
         text += '（' + formatRelativeGrowthChange_(fact.difference_change) + '）';
