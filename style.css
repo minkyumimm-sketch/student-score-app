@@ -45,13 +45,15 @@ h1 {
 }
 input[type="text"],
 input[type="date"],
-input[type="number"] {
+input[type="number"],
+select {
   width: 100%;
   padding: 14px;
   font-size: 18px;
   border: 1px solid #ccc;
   border-radius: 6px;
   margin-top: 6px;
+  background: #fff;
 }
 .tap-list {
   margin-top: 12px;
@@ -105,6 +107,17 @@ input[type="number"] {
   width: 130px;
   text-align: right;
 }
+.subject-row select {
+  width: 130px;
+}
+/* STUDENT-GRADE-9SUBJECT-PUBLIC-UI-IMPL-1: 9教科のうち「保健体育」「技術・家庭」は既存の
+   2文字科目ラベル(.subject-row label{width:80px})より長いため、このブロック限定でラベル幅を
+   広げる。既存の.subject-row labelには一切手を加えない（他画面への影響を避けるため、
+   2クラス指定でより高い詳細度にする）。 */
+.subject-row.grade-subject-row label {
+  width: 110px;
+  font-size: 16px;
+}
 .summary-row {
   display: flex;
   justify-content: space-between;
@@ -125,6 +138,11 @@ input[type="number"] {
 }
 .message.info {
   color: #555;
+}
+/* STUDENT-GRADE-9SUBJECT-PUBLIC-UI-IMPL-1: confirmed済み評定の再編集警告。エラー(赤)とは
+   区別し、注意喚起であることを伝えるための控えめな暖色にする。 */
+.message.warning {
+  color: #9a6b00;
 }
 .selected-label {
   font-size: 15px;

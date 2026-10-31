@@ -26,6 +26,9 @@
        独立した副導線として常時表示する（学年平均ボタンと異なり、担当者判定は不要＝誰でも自分の
        結果を見られる）。 -->
   <button id="showScoreHistoryBtn" class="big-button secondary" onclick="ScoreAppUi.showScoreHistory()">これまでの結果を見る</button>
+  <!-- STUDENT-GRADE-9SUBJECT-PUBLIC-UI-IMPL-1: 内申点（9教科評定）入力。学年平均入力ボタンと異なり
+       担当者判定は不要＝誰でも自分の内申点を入力できるため、常時表示する。 -->
+  <button id="showGradeInputBtn" class="big-button secondary" onclick="ScoreAppUi.showGradeInput()">内申点（9教科評定）を入力する</button>
   <button class="big-button secondary" onclick="ScoreAppUi.backToSearch()">生徒選択に戻る</button>
 </div>
 
@@ -110,6 +113,82 @@
 <div id="step-avg-done" class="step">
   <div class="message success">学年平均を登録しました。</div>
   <div class="summary-row"><span>テスト</span><span id="avgDoneTest"></span></div>
+  <button class="big-button" onclick="ScoreAppUi.resetAll()">戻る</button>
+</div>
+
+<!-- STUDENT-GRADE-9SUBJECT-PUBLIC-UI-IMPL-1: 内申点（9教科評定）入力。既存の点数登録(step-tests〜
+     step-done)・学年平均入力(step-avg-*)・結果履歴(step-score-history*)とは完全に別画面・別state
+     として扱う。本人確認は既存の氏名検索→生徒選択のまま（追加のPIN・生年月日認証・短命セッションは
+     導入しない）。 -->
+<div id="step-grade-select" class="step">
+  <div class="selected-label" id="gradeSelectStudentLabel"></div>
+  <div class="hint">内申点を入力する年度・学年・学期を選んでください。</div>
+  <div class="subject-row"><label>年度</label><select id="gradeYearSelect"></select></div>
+  <div class="subject-row">
+    <label>学年</label>
+    <select id="gradeLevelSelect">
+      <option value="中1">中1</option>
+      <option value="中2">中2</option>
+      <option value="中3">中3</option>
+    </select>
+  </div>
+  <div class="subject-row">
+    <label>学期</label>
+    <select id="gradeTermSelect">
+      <option value="前期">前期</option>
+      <option value="後期">後期</option>
+    </select>
+  </div>
+  <div id="gradeSelectMessage" class="message"></div>
+  <button class="big-button" id="gradeSelectNextBtn" onclick="ScoreAppUi.goToGradeForm()">次へ</button>
+  <button class="big-button secondary" onclick="ScoreAppUi.backToTestsFromGrade()">戻る</button>
+</div>
+
+<div id="step-grade-form" class="step">
+  <div class="selected-label" id="gradeFormLabel"></div>
+  <div id="gradeFormConfirmedWarning" class="message warning" hidden></div>
+  <div class="hint">9教科の評定（1〜5）を入力してください。分からない教科は空欄のままでかまいません。</div>
+  <div class="subject-row grade-subject-row"><label>国語</label><select id="g_japanese"><option value="">未入力</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></div>
+  <div class="subject-row grade-subject-row"><label>社会</label><select id="g_social"><option value="">未入力</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></div>
+  <div class="subject-row grade-subject-row"><label>数学</label><select id="g_math"><option value="">未入力</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></div>
+  <div class="subject-row grade-subject-row"><label>理科</label><select id="g_science"><option value="">未入力</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></div>
+  <div class="subject-row grade-subject-row"><label>音楽</label><select id="g_music"><option value="">未入力</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></div>
+  <div class="subject-row grade-subject-row"><label>美術</label><select id="g_art"><option value="">未入力</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></div>
+  <div class="subject-row grade-subject-row"><label>保健体育</label><select id="g_pe"><option value="">未入力</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></div>
+  <div class="subject-row grade-subject-row"><label>技術・家庭</label><select id="g_tech_home"><option value="">未入力</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></div>
+  <div class="subject-row grade-subject-row"><label>英語</label><select id="g_english"><option value="">未入力</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></div>
+  <div id="gradeFormMessage" class="message"></div>
+  <button class="big-button" id="gradeFormConfirmBtn" onclick="ScoreAppUi.goToGradeConfirm()">確認する</button>
+  <button class="big-button secondary" onclick="ScoreAppUi.backToGradeSelect()">戻る</button>
+</div>
+
+<div id="step-grade-confirm" class="step">
+  <div class="hint">この内容で保存します。よろしいですか？</div>
+  <div class="confirm-student-name" id="gc_student"></div>
+  <div class="summary-row"><span>年度</span><span id="gc_year"></span></div>
+  <div class="summary-row"><span>学年</span><span id="gc_gradeLevel"></span></div>
+  <div class="summary-row"><span>学期</span><span id="gc_term"></span></div>
+  <div class="summary-row"><span>国語</span><span id="gc_japanese"></span></div>
+  <div class="summary-row"><span>社会</span><span id="gc_social"></span></div>
+  <div class="summary-row"><span>数学</span><span id="gc_math"></span></div>
+  <div class="summary-row"><span>理科</span><span id="gc_science"></span></div>
+  <div class="summary-row"><span>音楽</span><span id="gc_music"></span></div>
+  <div class="summary-row"><span>美術</span><span id="gc_art"></span></div>
+  <div class="summary-row"><span>保健体育</span><span id="gc_pe"></span></div>
+  <div class="summary-row"><span>技術・家庭</span><span id="gc_tech_home"></span></div>
+  <div class="summary-row"><span>英語</span><span id="gc_english"></span></div>
+  <div id="gradeConfirmMessage" class="message"></div>
+  <button class="big-button" id="gradeConfirmSaveBtn" onclick="ScoreAppUi.saveGradeHistoryEntry()">保存する</button>
+  <button class="big-button secondary" id="gradeConfirmBackBtn" onclick="ScoreAppUi.backToGradeForm()">修正する</button>
+  <button class="big-button secondary" id="gradeConfirmRecheckBtn" onclick="ScoreAppUi.recheckGradeSaveStatus()">保存状態を確認する（最新データを再取得）</button>
+</div>
+
+<div id="step-grade-done" class="step">
+  <div class="message success">内申点を登録しました。</div>
+  <div class="summary-row"><span>年度</span><span id="gdone_year"></span></div>
+  <div class="summary-row"><span>学年</span><span id="gdone_gradeLevel"></span></div>
+  <div class="summary-row"><span>学期</span><span id="gdone_term"></span></div>
+  <div id="gradeDoneResult"></div>
   <button class="big-button" onclick="ScoreAppUi.resetAll()">戻る</button>
 </div>
 

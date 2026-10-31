@@ -36,6 +36,25 @@
   // ここでの100という値も入力のしやすさのためだけで、100点超の送信自体は拒否しない。
   var MAX_SCORE = 100;
 
+  // STUDENT-GRADE-9SUBJECT-PUBLIC-UI-IMPL-1: 内申点（9教科評定）入力。教科キー・並び順は
+  // Private側GradeHistoryRepository.gsのGRADE_HISTORY_SUBJECT_FIELDSと完全一致させる
+  // （別名を作らない、既存RANK_FIELDS等と同じ方針）。
+  var GRADE_SUBJECT_KEYS = ['japanese', 'social', 'math', 'science', 'music', 'art', 'pe', 'tech_home', 'english'];
+  var GRADE_LEVEL_OPTIONS = ['中1', '中2', '中3'];
+  var GRADE_TERM_OPTIONS = ['前期', '後期'];
+  // Private側GradeHistoryRepository.gsのgetGradeHistoryYearOptions_(末尾_付きの内部関数、
+  // Publicから直接呼べない)と同じ「実行時の年基準・現在年の5年前〜4年後」の式を、新規Private API
+  // を追加せずにPublic側でも独立に再現する（GATE3確定事項：最小案）。配列は昇順10件で
+  // 固定長のため、インデックス5が常に「現在年」になる。
+  // 残存リスク：Private側がこの式を変更した場合、この定数は自動追従しない（値の二重管理）。
+  var GRADE_YEAR_CURRENT_INDEX_ = 5;
+  function buildGradeYearOptions_() {
+    var currentYear = new Date().getFullYear();
+    var years = [];
+    for (var i = -5; i <= 4; i++) years.push(currentYear + i);
+    return years;
+  }
+
   // STEP 3の点数入力・保存を含め、状態はこの1箇所にまとめる。
   // 生年月日認証は廃止したため、認証関連の状態は持たない（localStorage/sessionStorageへの
   // 保存もこれまで通り行わない。reload時は最初からやり直し）。
@@ -58,8 +77,35 @@
     // Phase 2D STEP 3: 後日フィードバック（これまでの結果を見る）用のstate。
     // 通常点数入力state・学年平均入力stateとは完全に分離し、混線させない。
     scoreHistory: [],
-    selectedHistoryEntry: null // getScoreHistoryの1件（{test_id, test_name, japanese, math, english, science, social, five_subject_total}）
+    selectedHistoryEntry: null, // getScoreHistoryの1件（{test_id, test_name, japanese, math, english, science, social, five_subject_total}）
+    // STUDENT-GRADE-9SUBJECT-PUBLIC-UI-IMPL-1: 内申点（9教科評定）入力用のstate。
+    // 通常点数入力・学年平均入力・結果履歴のいずれのstateとも完全に分離し、混線させない。
+    gradeInput: freshGradeInputState_()
   };
+
+  // GATE4: 通信失敗時は未登録とみなさない。fetched=falseのままにすることで、取得エラー時に
+  // expectedRevision=0で新規保存できる状態に進ませない（fetchGradeHistory_参照）。
+  function freshGradeInputState_() {
+    return {
+      year: null,
+      gradeLevel: null,
+      term: null,
+      fetched: false, // true = 直近の選択でgetGradeHistoryが成功した（record有無に関わらず）
+      existingRecord: null, // fetched=trueの時のみ有効。null=未登録、objectは既存レコード
+      expectedRevision: 0,
+      pendingSubjects: null, // 確認画面へ渡す直前に確定した9教科の入力値
+      // STUDENT-GRADE-9SUBJECT-PUBLIC-UI-REGRESSION-FIX-1 GATE5: 直近に送信を試みたsubjects/
+      // expectedRevisionを記録する。通信結果不明時に「保存されている内容が送信内容と一致するか」を
+      // 後から確認するために使う（recheckGradeSaveStatus参照）。
+      lastAttemptedSubmission: null // {subjects, expectedRevision} | null
+    };
+  }
+
+  // GATE5: 保存済みrecordのsubjectsと、直前に送信を試みたsubjectsが一致するかを比較する。
+  function gradeSubjectsMatch_(a, b) {
+    if (!a || !b) return false;
+    return GRADE_SUBJECT_KEYS.every(function (key) { return a[key] === b[key]; });
+  }
 
   var searchTimer = null;
 
@@ -131,6 +177,34 @@
     var historyMessageEl = document.getElementById('historyMessage');
     if (historyMessageEl) showMessage('historyMessage', '', '');
     clearHistoryDetailDisplay_();
+    // STUDENT-GRADE-9SUBJECT-PUBLIC-UI-IMPL-1: 生徒を選び直したとき（共用タブレット）に、
+    // 前の生徒の評定入力・取得済みrecordを一瞬たりとも引き継がない。
+    resetGradeInputForNewStudent_();
+  }
+
+  // GATE2/GATE8: 別生徒へ切り替えた場合に前生徒の評定値を残さない。stateとDOM（年度・学年・
+  // 学期の選択・9教科入力欄・確認済み警告・エラーメッセージ）の両方をクリアする。
+  function resetGradeInputForNewStudent_() {
+    state.gradeInput = freshGradeInputState_();
+    var yearSelect = document.getElementById('gradeYearSelect');
+    if (yearSelect) yearSelect.selectedIndex = GRADE_YEAR_CURRENT_INDEX_;
+    var levelSelect = document.getElementById('gradeLevelSelect');
+    if (levelSelect) levelSelect.selectedIndex = 0;
+    var termSelect = document.getElementById('gradeTermSelect');
+    if (termSelect) termSelect.selectedIndex = 0;
+    clearGradeFormDisplay_();
+  }
+
+  function clearGradeFormDisplay_() {
+    GRADE_SUBJECT_KEYS.forEach(function (key) {
+      var el = document.getElementById('g_' + key);
+      if (el) el.value = '';
+    });
+    var warningEl = document.getElementById('gradeFormConfirmedWarning');
+    if (warningEl) { warningEl.hidden = true; warningEl.textContent = ''; }
+    if (document.getElementById('gradeSelectMessage')) showMessage('gradeSelectMessage', '', '');
+    if (document.getElementById('gradeFormMessage')) showMessage('gradeFormMessage', '', '');
+    if (document.getElementById('gradeConfirmMessage')) showMessage('gradeConfirmMessage', '', '');
   }
 
   // Phase 2D STEP 3: 結果詳細画面の表示をクリアする（前の生徒・前のテストの表示が
@@ -913,6 +987,296 @@
     goToStep('avg-form');
   }
 
+  // ===== STUDENT-GRADE-9SUBJECT-PUBLIC-UI-IMPL-1: 内申点（9教科評定）入力 =====
+  // 通常点数入力・学年平均入力・結果履歴のいずれとも別画面・別stateとして扱う。本人確認は
+  // 既存の氏名検索→生徒選択のまま（追加のPIN等は導入しない）。
+  //
+  // GATE6: 保存前の確認画面では9教科の入力値のみ表示し、素内申/換算内申/参考300点換算は
+  // 保存成功後のサーバー応答(record)を正本として表示する。GradeCalc.gsの計算ロジックを
+  // クライアント側で複製しない方式（複製する場合に必須となる「計算仕様の差異検出テスト」の
+  // 新設という複雑化を避けるため、GATE6が許容する簡易方式を採用した）。
+
+  function showGradeInput() {
+    document.getElementById('gradeSelectStudentLabel').textContent = state.selectedStudent.displayName + ' さん';
+    showMessage('gradeSelectMessage', '', '');
+    goToStep('grade-select');
+  }
+
+  function backToTestsFromGrade() {
+    renderTestList();
+    goToStep('tests');
+  }
+
+  // GATE4: 通信失敗時は未登録とみなさない。取得エラーとrecord=nullを明確に区別し、取得エラー時は
+  // state.gradeInput.fetched=falseのままにする（expectedRevision=0での新規保存を許可しない）。
+  // errorMessageElIdは呼び出し元の画面に応じてエラー表示先を切り替えるための引数（grade-select
+  // からの初回取得とgrade-confirmからの再取得(recheckGradeSaveStatus)の両方で共有するため）。
+  // callback(ok)のokがtrueのときだけ呼び出し元は次の画面へ進んでよい。
+  function fetchGradeHistory_(year, gradeLevel, term, errorMessageElId, callback) {
+    var studentId = state.selectedStudent.studentId;
+    ScoreApi.get('getGradeHistory', { studentId: studentId, year: year, grade: gradeLevel, term: term }).then(function (result) {
+      // 応答が返る前に別の生徒へ切り替わっていたら反映しない（既存の他箇所と同じstale防止）。
+      if (!state.selectedStudent || state.selectedStudent.studentId !== studentId) return;
+      if (!result.ok) {
+        state.gradeInput.fetched = false;
+        showMessage(errorMessageElId, '', result.error + '\n直し方が分からない場合は先生に伝えてください。');
+        callback(false);
+        return;
+      }
+      state.gradeInput.year = year;
+      state.gradeInput.gradeLevel = gradeLevel;
+      state.gradeInput.term = term;
+      state.gradeInput.fetched = true;
+      state.gradeInput.existingRecord = result.record; // nullまたはrecordオブジェクト
+      state.gradeInput.expectedRevision = result.record ? result.record.revision : 0;
+      callback(true);
+    });
+  }
+
+  // 取得済みstate.gradeInputの内容を9教科入力欄・confirmed警告へ反映する。
+  function applyGradeFormFromState_() {
+    var record = state.gradeInput.existingRecord;
+    GRADE_SUBJECT_KEYS.forEach(function (key) {
+      var el = document.getElementById('g_' + key);
+      var value = record ? record.subjects[key] : null;
+      el.value = (typeof value === 'number') ? String(value) : '';
+    });
+    var warningEl = document.getElementById('gradeFormConfirmedWarning');
+    if (record && record.confirmationStatus === 'confirmed') {
+      warningEl.textContent = 'この評定は講師確認済みです。変更して保存すると未確認に戻ります。';
+      warningEl.hidden = false;
+    } else {
+      warningEl.hidden = true;
+      warningEl.textContent = '';
+    }
+  }
+
+  function goToGradeForm() {
+    var year = Number(document.getElementById('gradeYearSelect').value);
+    var gradeLevel = document.getElementById('gradeLevelSelect').value;
+    var term = document.getElementById('gradeTermSelect').value;
+    showMessage('gradeSelectMessage', 'info', '読み込み中…');
+    var btn = document.getElementById('gradeSelectNextBtn');
+    btn.disabled = true;
+    fetchGradeHistory_(year, gradeLevel, term, 'gradeSelectMessage', function (ok) {
+      btn.disabled = false;
+      if (!ok) return; // fetchGradeHistory_が既にgradeSelectMessageへエラーを表示済み
+      showMessage('gradeSelectMessage', '', '');
+      document.getElementById('gradeFormLabel').textContent =
+        state.selectedStudent.displayName + ' さん / ' + year + '年度 ' + gradeLevel + ' ' + term;
+      applyGradeFormFromState_();
+      showMessage('gradeFormMessage', '', '');
+      goToStep('grade-form');
+    });
+  }
+
+  function backToGradeSelect() {
+    // 年度・学年・学期の選択はDOMに残っているため再設定しない（既存backToAverageTests等と同じ考え方）。
+    goToStep('grade-select');
+  }
+
+  function collectGradeSubjects_() {
+    var subjects = {};
+    GRADE_SUBJECT_KEYS.forEach(function (key) {
+      subjects[key] = document.getElementById('g_' + key).value.trim();
+    });
+    return subjects;
+  }
+
+  // GATE5: 0・6・小数・不正文字列は入力不可。<select>のoptionは空欄/1〜5のみのためUI操作では
+  // 原理的に不正値は発生しないが、既存goToConfirm/goToAverageConfirmと同じ多層防御方針として
+  // ここでも検証する。
+  function goToGradeConfirm() {
+    var subjects = collectGradeSubjects_();
+    var invalid = GRADE_SUBJECT_KEYS.some(function (key) {
+      var v = subjects[key];
+      if (v === '') return false;
+      var n = Number(v);
+      return isNaN(n) || !isFinite(n) || !Number.isInteger(n) || n < 1 || n > 5;
+    });
+    if (invalid) {
+      showMessage('gradeFormMessage', '', '評定は1〜5の整数で入力してください（分からない教科は空欄のままでOKです）。');
+      return;
+    }
+    showMessage('gradeFormMessage', '', '');
+
+    state.gradeInput.pendingSubjects = subjects;
+    document.getElementById('gc_student').textContent = state.selectedStudent.displayName;
+    document.getElementById('gc_year').textContent = state.gradeInput.year + '年度';
+    document.getElementById('gc_gradeLevel').textContent = state.gradeInput.gradeLevel;
+    document.getElementById('gc_term').textContent = state.gradeInput.term;
+    GRADE_SUBJECT_KEYS.forEach(function (key) {
+      var value = subjects[key];
+      document.getElementById('gc_' + key).textContent = value === '' ? '（未入力）' : value;
+    });
+    // GATE6: 確認画面へ入るたびに3つのボタンを必ず有効な状態にする（直前の保存試行で
+    // disabledのまま残っていても、ここで確実にリセットする）。
+    document.getElementById('gradeConfirmSaveBtn').disabled = false;
+    document.getElementById('gradeConfirmBackBtn').disabled = false;
+    document.getElementById('gradeConfirmRecheckBtn').disabled = false;
+    showMessage('gradeConfirmMessage', '', '');
+    goToStep('grade-confirm');
+  }
+
+  function backToGradeForm() {
+    // 入力欄の値には触れない（修正時に再入力を不要にするため、backToScoreと同じ方針）。
+    goToStep('grade-form');
+  }
+
+  // 通信結果不明時に、成功と断定せず・自動再送もせずに保存状態を確認できる導線。
+  // GETは副作用のない再取得のため、ここから呼んでも非冪等なPOSTの再送にはならない。
+  // GATE5: 再取得したrecordと直前に送信を試みた内容(lastAttemptedSubmission)が一致するかを
+  // 比較し、一致していても「保存に成功した」と断定せず「現在保存されている内容は送信内容と
+  // 一致しています」とだけ伝える。一致しない場合は最新データを表示し、ユーザーに再編集の
+  // 判断を委ねる。GATE4/GATE6: 再取得が失敗した場合は、保存操作を再開できない状態
+  // （確認画面に留まり、ボタンはdisabledのまま）を維持する。
+  function recheckGradeSaveStatus() {
+    var studentId = state.selectedStudent.studentId;
+    document.getElementById('gradeConfirmSaveBtn').disabled = true;
+    document.getElementById('gradeConfirmBackBtn').disabled = true;
+    document.getElementById('gradeConfirmRecheckBtn').disabled = true;
+    showMessage('gradeConfirmMessage', 'info', '最新の保存状態を確認しています…');
+    fetchGradeHistory_(state.gradeInput.year, state.gradeInput.gradeLevel, state.gradeInput.term, 'gradeConfirmMessage', function (ok) {
+      if (!state.selectedStudent || state.selectedStudent.studentId !== studentId) return;
+      if (!ok) return; // fetchGradeHistory_が既にgradeConfirmMessageへエラーを表示済み。保存状態不明のままボタンもdisabledのまま維持する。
+
+      applyGradeFormFromState_();
+      var last = state.gradeInput.lastAttemptedSubmission;
+      var record = state.gradeInput.existingRecord;
+      if (last && record && record.revision === last.expectedRevision + 1 && gradeSubjectsMatch_(record.subjects, last.subjects)) {
+        showMessage('gradeFormMessage', '', '現在保存されている内容は、送信内容と一致しています。');
+      } else if (last) {
+        showMessage('gradeFormMessage', '', '送信した内容とは異なるデータが保存されています。最新の内容を確認し、必要であれば入力し直してください。');
+      } else {
+        showMessage('gradeFormMessage', '', '最新データを確認しました。内容を確認してください。');
+      }
+      document.getElementById('gradeConfirmSaveBtn').disabled = false;
+      document.getElementById('gradeConfirmBackBtn').disabled = false;
+      document.getElementById('gradeConfirmRecheckBtn').disabled = false;
+      goToStep('grade-form');
+    });
+  }
+
+  function renderGradeDoneResult_(record) {
+    var container = document.getElementById('gradeDoneResult');
+    container.innerHTML = '';
+    if (record.sonNaishin === null || record.kansanNaishin === null || record.referenceScore300 === null) {
+      var incompleteEl = document.createElement('div');
+      incompleteEl.className = 'message';
+      incompleteEl.textContent = '9教科すべてが入力されていないため、計算結果は未完成です。';
+      container.appendChild(incompleteEl);
+      return;
+    }
+    function appendRow(label, value) {
+      var row = document.createElement('div');
+      row.className = 'summary-row';
+      var labelSpan = document.createElement('span');
+      labelSpan.textContent = label;
+      var valueSpan = document.createElement('span');
+      valueSpan.textContent = value;
+      row.appendChild(labelSpan);
+      row.appendChild(valueSpan);
+      container.appendChild(row);
+    }
+    appendRow('素内申（45点満点）', record.sonNaishin + '点');
+    appendRow('換算内申（65点満点）', record.kansanNaishin + '点');
+    appendRow('参考300点換算', record.referenceScore300 + '点');
+    var noteEl = document.createElement('div');
+    noteEl.className = 'hint';
+    noteEl.textContent = '※正式な調査書点ではない参考値です。';
+    container.appendChild(noteEl);
+  }
+
+  function saveGradeHistoryEntry() {
+    var subjects = state.gradeInput.pendingSubjects;
+    var studentId = state.selectedStudent.studentId;
+    var saveBtn = document.getElementById('gradeConfirmSaveBtn');
+    var backBtn = document.getElementById('gradeConfirmBackBtn');
+    var recheckBtn = document.getElementById('gradeConfirmRecheckBtn');
+    // GATE6: 保存中は確認画面の3ボタン（保存・修正・保存状態確認）すべてを無効化する。
+    saveBtn.disabled = true;
+    backBtn.disabled = true;
+    recheckBtn.disabled = true;
+    showMessage('gradeConfirmMessage', 'info', '保存中…');
+
+    var payload = {
+      studentId: studentId,
+      year: state.gradeInput.year,
+      grade: state.gradeInput.gradeLevel,
+      term: state.gradeInput.term,
+      subjects: {},
+      expectedRevision: state.gradeInput.expectedRevision
+    };
+    // GATE5: 未入力はnullとして送信する（送信時には9教科すべてのキーを含める。部分PATCHにしない）。
+    GRADE_SUBJECT_KEYS.forEach(function (key) {
+      var v = subjects[key];
+      payload.subjects[key] = (v === '') ? null : Number(v);
+    });
+    // GATE5: 通信結果不明時に「送信内容と保存内容が一致するか」を後で確認できるよう、
+    // 直前に送信した内容を記録する（recheckGradeSaveStatus参照）。
+    state.gradeInput.lastAttemptedSubmission = { subjects: payload.subjects, expectedRevision: payload.expectedRevision };
+
+    function reenableConfirmButtons_() {
+      saveBtn.disabled = false;
+      backBtn.disabled = false;
+      recheckBtn.disabled = false;
+    }
+
+    ScoreApi.post('saveGradeHistory', payload).then(function (result) {
+      // GATE6: 保存中に別の生徒へ切り替わっていたら、古い生徒の応答を新しい生徒の画面へ反映しない。
+      if (!state.selectedStudent || state.selectedStudent.studentId !== studentId) return;
+
+      if (!result.ok) {
+        if (result.errorCode === 'CONFLICT') {
+          // GATE4: 保存成功扱いにしない。最新データを自動で読み直す。再取得が成功した場合のみ
+          // grade-form画面へ戻して再編集可能にする（既存saveAverageScoreのCONFLICT処理と同じ
+          // auto re-fetchの方針。再取得自体が失敗した場合は、保存操作を再開できない状態
+          // （確認画面に留まり、ボタンはdisabledのまま）を維持する）。
+          fetchGradeHistory_(state.gradeInput.year, state.gradeInput.gradeLevel, state.gradeInput.term, 'gradeConfirmMessage', function (ok) {
+            if (!state.selectedStudent || state.selectedStudent.studentId !== studentId) return;
+            if (!ok) return; // fetchGradeHistory_が既にgradeConfirmMessageへエラーを表示済み。ボタンはdisabledのまま。
+            applyGradeFormFromState_();
+            // GATE4: 未保存だったあなたの入力は失われ、最新の保存済みデータに置き換わったことを
+            // 明示する（入力値を保持したままrevisionだけ更新して再送信可能にする、という危険な
+            // 状態にはしない）。
+            showMessage('gradeFormMessage', '', result.error + ' あなたが入力した内容は保存されていません。最新の保存済みデータに置き換えました。内容を確認し、必要であれば入力し直してもう一度保存してください。');
+            reenableConfirmButtons_();
+            goToStep('grade-form');
+          });
+          return;
+        }
+        // NET-2B/NET-2D(api.js)の既存契約: 通信エラー（fetch失敗・timeout・JSON解釈失敗）は
+        // 必ず「通信エラー: 」で始まる。サーバーが明確に返したvalidation拒否等とは、この
+        // prefixの有無で区別できる（新しい判定基準を独自に作らず、既存の契約を再利用する）。
+        var isAmbiguousNetworkFailure = typeof result.error === 'string' && result.error.indexOf('通信エラー:') === 0;
+        if (isAmbiguousNetworkFailure) {
+          // GATE5: 通信結果不明時は「保存失敗が確定した」と扱わない。保存ボタンは無効のままにし、
+          // 自動retryはしない。「保存状態を確認する」から明示的に再取得して確認してもらう。
+          showMessage('gradeConfirmMessage', '', result.error + '\n保存結果が不明です。下の「保存状態を確認する」から最新の状態を確認してください。');
+          recheckBtn.disabled = false; // 確認導線だけは使えるようにする（保存ボタンはdisabledのまま維持する）
+          return;
+        }
+        // 通信結果不明ではない明確な拒否（studentId/year/grade/term/教科値のvalidation拒否等）は
+        // 既存submitScore/saveAverageScoreと同じ方針で確認画面に留まり再操作を促す。
+        showMessage('gradeConfirmMessage', '', result.error + '\n直し方が分からない場合は先生に伝えてください。');
+        reenableConfirmButtons_();
+        return;
+      }
+
+      var record = result.record;
+      document.getElementById('gdone_year').textContent = record.year + '年度';
+      document.getElementById('gdone_gradeLevel').textContent = record.grade;
+      document.getElementById('gdone_term').textContent = record.term;
+      renderGradeDoneResult_(record);
+
+      // 共用タブレットのため、保存成功後は生徒に関する状態を完全にクリアする
+      // （既存submitScore/saveAverageScoreの保存成功時と同じ方針）。
+      resetStudentDependentState_();
+      state.selectedStudent = null;
+      goToStep('grade-done');
+    });
+  }
+
   // ===== 戻る操作 =====
 
   function backToSearch() {
@@ -993,7 +1357,24 @@
     });
   }
 
+  // STUDENT-GRADE-9SUBJECT-PUBLIC-UI-IMPL-1: 年度選択肢は実行時の年に依存するため、静的HTMLでは
+  // 書けずJSで構築する（学年・学期はPrivate側の固定選択肢と同じく静的HTMLのままで十分なため、
+  // あえて動的構築しない）。
+  function populateGradeYearOptions_() {
+    var select = document.getElementById('gradeYearSelect');
+    var years = buildGradeYearOptions_();
+    select.innerHTML = '';
+    years.forEach(function (y) {
+      var opt = document.createElement('option');
+      opt.value = String(y);
+      opt.textContent = y + '年度';
+      select.appendChild(opt);
+    });
+    select.selectedIndex = GRADE_YEAR_CURRENT_INDEX_; // 配列は昇順固定長10件、インデックス5=現在年
+  }
+
   applyScoreInputRange_();
+  populateGradeYearOptions_();
   warmUpApi_();
   focusStudentSearch_();
   setupScoreFieldEnterNavigation_();
@@ -1018,6 +1399,15 @@
     backToTestsFromHistory: backToTestsFromHistory,
     backToScoreHistory: backToScoreHistory,
     // STEP B: 学年順位の後追い入力
-    saveHistoryRank: saveHistoryRank_
+    saveHistoryRank: saveHistoryRank_,
+    // STUDENT-GRADE-9SUBJECT-PUBLIC-UI-IMPL-1: 内申点（9教科評定）入力
+    showGradeInput: showGradeInput,
+    backToTestsFromGrade: backToTestsFromGrade,
+    goToGradeForm: goToGradeForm,
+    backToGradeSelect: backToGradeSelect,
+    goToGradeConfirm: goToGradeConfirm,
+    backToGradeForm: backToGradeForm,
+    recheckGradeSaveStatus: recheckGradeSaveStatus,
+    saveGradeHistoryEntry: saveGradeHistoryEntry
   };
 })();
