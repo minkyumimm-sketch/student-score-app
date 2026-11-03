@@ -183,7 +183,7 @@
   }
 
   // GATE2/GATE8: 別生徒へ切り替えた場合に前生徒の評定値を残さない。stateとDOM（年度・学年・
-  // 学期の選択・9教科入力欄・確認済み警告・エラーメッセージ）の両方をクリアする。
+  // 学期の選択・9教科入力欄・エラーメッセージ）の両方をクリアする。
   function resetGradeInputForNewStudent_() {
     state.gradeInput = freshGradeInputState_();
     var yearSelect = document.getElementById('gradeYearSelect');
@@ -200,8 +200,6 @@
       var el = document.getElementById('g_' + key);
       if (el) el.value = '';
     });
-    var warningEl = document.getElementById('gradeFormConfirmedWarning');
-    if (warningEl) { warningEl.hidden = true; warningEl.textContent = ''; }
     if (document.getElementById('gradeSelectMessage')) showMessage('gradeSelectMessage', '', '');
     if (document.getElementById('gradeFormMessage')) showMessage('gradeFormMessage', '', '');
     if (document.getElementById('gradeConfirmMessage')) showMessage('gradeConfirmMessage', '', '');
@@ -1033,7 +1031,7 @@
     });
   }
 
-  // 取得済みstate.gradeInputの内容を9教科入力欄・confirmed警告へ反映する。
+  // 取得済みstate.gradeInputの内容を9教科入力欄へ反映する。
   function applyGradeFormFromState_() {
     var record = state.gradeInput.existingRecord;
     GRADE_SUBJECT_KEYS.forEach(function (key) {
@@ -1041,14 +1039,6 @@
       var value = record ? record.subjects[key] : null;
       el.value = (typeof value === 'number') ? String(value) : '';
     });
-    var warningEl = document.getElementById('gradeFormConfirmedWarning');
-    if (record && record.confirmationStatus === 'confirmed') {
-      warningEl.textContent = 'この評定は講師確認済みです。変更して保存すると未確認に戻ります。';
-      warningEl.hidden = false;
-    } else {
-      warningEl.hidden = true;
-      warningEl.textContent = '';
-    }
   }
 
   function goToGradeForm() {

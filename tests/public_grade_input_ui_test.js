@@ -374,10 +374,9 @@ async function run() {
     GRADE_SUBJECT_KEYS_TEST.forEach(function (key) {
       assertEqual(sb.document.getElementById('g_' + key).value, '', 'B3: 未登録時は教科「' + key + '」が空欄表示');
     });
-    assertEqual(sb.document.getElementById('gradeFormConfirmedWarning').hidden, true, 'B4: 未登録時はconfirmed警告が非表示');
   }
 
-  // ===== C. 既存評定の読込・confirmed警告 =====
+  // ===== C. 既存評定の読込(confirmation_status列は互換性のため残るがUI表示はしない) =====
   {
     const existing = makeGradeRecord({ confirmationStatus: 'confirmed', revision: 3 });
     const sb = loadSandbox(defaultHandlers({
@@ -393,9 +392,7 @@ async function run() {
 
     assertEqual(sb.document.getElementById('g_japanese').value, '4', 'C1: 既存評定（国語=4）が読み込まれる');
     assertEqual(sb.document.getElementById('g_english').value, '3', 'C2: 既存評定（英語=3）が読み込まれる');
-    const warningEl = sb.document.getElementById('gradeFormConfirmedWarning');
-    assertEqual(warningEl.hidden, false, 'C3: confirmed済みレコードでは警告が表示される');
-    assert(warningEl.textContent.indexOf('講師確認済み') !== -1, 'C4: 警告文言に「講師確認済み」を含む');
+    assertEqual(sb.document.getElementById('gradeFormConfirmedWarning'), null, 'C3: confirmed警告のUI要素は撤去されている');
   }
 
   // ===== D. 9教科入力・部分入力・確認画面表示 =====
@@ -490,7 +487,7 @@ async function run() {
     assert(resultText.indexOf('36点') === -1, 'F3: 未完成時は計算結果（素内申等）を表示しない');
   }
 
-  // ===== G. confirmed再編集で保存後に未確認へ戻ることの表示確認（server応答を正本として表示） =====
+  // ===== G. confirmed状態のレコードを再編集・保存できる(表示は撤去済み、保存は従来どおり可能) =====
   {
     const existing = makeGradeRecord({ confirmationStatus: 'confirmed', revision: 3 });
     const sb = loadSandbox(defaultHandlers({
@@ -506,12 +503,11 @@ async function run() {
     sb.document.getElementById('gradeTermSelect').value = '前期';
     sb.context.ScoreAppUi.goToGradeForm();
     await tick();
-    assertEqual(sb.document.getElementById('gradeFormConfirmedWarning').hidden, false, 'G1: confirmed済みレコードの再編集で警告が出る');
 
     sb.context.ScoreAppUi.goToGradeConfirm();
     sb.context.ScoreAppUi.saveGradeHistoryEntry();
     await tick();
-    assert(sb.document.getElementById('step-grade-done').classList.contains('active'), 'G2: confirmed再編集も保存できる');
+    assert(sb.document.getElementById('step-grade-done').classList.contains('active'), 'G2: confirmed状態だったレコードの再編集も保存できる');
   }
 
   // ===== H. GET通信失敗（record=nullと明確に区別し、新規保存できる状態にしない） =====
@@ -847,7 +843,6 @@ async function run() {
     sb.context.ScoreAppUi.goToGradeForm();
     await tick();
     assertEqual(sb.document.getElementById('g_japanese').value, '4', 'M1: 生徒1の評定が表示されている');
-    assertEqual(sb.document.getElementById('gradeFormConfirmedWarning').hidden, false, 'M2: 生徒1でconfirmed警告が出ている');
 
     // 別生徒へ切り替える。
     currentStudentList = [STUDENT2];
@@ -855,7 +850,6 @@ async function run() {
     await selectFirstSearchResult_(sb, 'べつ');
 
     assertEqual(sb.document.getElementById('g_japanese').value, '', 'M3: 生徒切替後は前生徒の評定入力欄がクリアされている');
-    assertEqual(sb.document.getElementById('gradeFormConfirmedWarning').hidden, true, 'M4: 生徒切替後はconfirmed警告も消えている');
   }
 
   // ===== N. resetAll()との整合（既存の共有端末向けリセット動作を壊さない） =====
@@ -875,7 +869,6 @@ async function run() {
     sb.context.ScoreAppUi.resetAll();
     assert(sb.document.getElementById('step-search').classList.contains('active'), 'N2: resetAll()で検索画面に戻る');
     assertEqual(sb.document.getElementById('g_japanese').value, '', 'N3: resetAll()で評定入力欄もクリアされる');
-    assertEqual(sb.document.getElementById('gradeFormConfirmedWarning').hidden, true, 'N4: resetAll()でconfirmed警告もクリアされる');
   }
 
   // ===== O. 非回帰：既存の氏名検索・点数登録・平均点登録・成績履歴・既存API通信・既存CSSクラス =====
